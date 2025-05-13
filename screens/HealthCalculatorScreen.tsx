@@ -219,7 +219,27 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
               style={styles.suggestionsButton}
               onPress={handleViewFoodSuggestions}
             >
-              <Text style={styles.suggestionsButtonText}>Xem gợi ý món ăn</Text>
+              <Text style={styles.suggestionsButtonText}>Xem danh sách món ăn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.suggestionsButton, { marginTop: 10, backgroundColor: '#4CAF50' }]}
+              onPress={() => navigation.navigate('MealPlan', {
+                targetCalories: Math.round(results.recommendedCalories),
+                goal: goal,
+              })}
+            >
+              <Text style={styles.suggestionsButtonText}>Tạo thực đơn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: '#4CAF50' }]}
+              onPress={() => navigation.navigate('FoodSuggestions', {
+                targetCalories: results.recommendedCalories,
+                goal,
+              })}
+            >
+              <Text style={styles.buttonText}>Xem gợi ý thực đơn</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -323,6 +343,19 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   suggestionsButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  button: {
+    backgroundColor: '#4CAF50',
+    height: 50,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  buttonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
