@@ -3,140 +3,158 @@ import {
   View,
   Text,
   TextInput,
+  TouchableOpacity,
   StyleSheet,
   Alert,
-  TouchableOpacity,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { auth } from '../utils/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 type SignupScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Signup'>;
 
 const SignupScreen: React.FC = () => {
   const navigation = useNavigation<SignupScreenNavigationProp>();
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const handleSignup = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
-      return;
-    }
-
-    setLoading(true);
     try {
-      const result = await auth.register(email, password, name);
-      if (result.success) {
-        Alert.alert('Thành công', 'Đăng ký thành công. Vui lòng đăng nhập.', [
+      if (!email || !password || !confirmPassword) {
+        Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp');
+        return;
+      }
+
+      const usersData = await AsyncStorage.getItem('users');
+      const users = usersData ? JSON.parse(usersData) : [];
+
+      if (users.some((user: any) => user.email === email)) {
+        Alert.alert('Lỗi', 'Email đã được sử dụng');
+        return;
+      }
+
+      const newUser = {
+        email,
+        password,
+        isAdmin,
+      };
+
+      await AsyncStorage.setItem('users', JSON.stringify([...users, newUser]));
+      await AsyncStorage.setItem('userEmail', email);
+
+      Alert.alert(
+        'Thành công',
+        'Đăng ký thành công!',
+        [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Login'),
+            onPress: () => {
+              if (isAdmin) {
+                navigation.replace('Admin');
+              } else {
+                navigation.replace('Home');
+              }
+            },
           },
-        ]);
-      } else {
-        Alert.alert('Lỗi', result.message);
-      }
-    } catch (error: any) {
-      Alert.alert('Lỗi đăng ký', error.message);
-    } finally {
-      setLoading(false);
+        ]
+      );
+    } catch (error) {
+      console.error('Error during signup:', error);
+      Alert.alert('Lỗi', 'Không thể đăng ký. Vui lòng thử lại.');
     }
   };
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>Đăng ký tài khoản</Text>
-        <Text style={styles.subtitle}>Tạo tài khoản để bắt đầu</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Icon name="restaurant" size={64} color="#4CAF50" />
+          <Text style={styles.title}>Đăng ký</Text>
+        </View>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Họ tên</Text>
+            <Icon name="email" size={24} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nhập họ tên của bạn"
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập email của bạn"
-              keyboardType="email-address"
-              autoCapitalize="none"
+              placeholder="Email"
               value={email}
               onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mật khẩu</Text>
+            <Icon name="lock" size={24} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nhập mật khẩu của bạn"
-              secureTextEntry
+              placeholder="Mật khẩu"
               value={password}
               onChangeText={setPassword}
+              secureTextEntry
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Xác nhận mật khẩu</Text>
+            <Icon name="lock" size={24} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nhập lại mật khẩu của bạn"
-              secureTextEntry
+              placeholder="Xác nhận mật khẩu"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              secureTextEntry
             />
           </View>
 
           <TouchableOpacity
-            style={styles.signupButton}
-            onPress={handleSignup}
-            disabled={loading}
+            style={[styles.adminToggle, isAdmin && styles.adminToggleActive]}
+            onPress={() => setIsAdmin(!isAdmin)}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.signupButtonText}>Đăng ký</Text>
-            )}
+            <Icon
+              name={isAdmin ? 'admin-panel-settings' : 'person'}
+              size={24}
+              color={isAdmin ? '#fff' : '#4CAF50'}
+            />
+            <Text
+              style={[
+                styles.adminToggleText,
+                isAdmin && styles.adminToggleTextActive,
+              ]}
+            >
+              {isAdmin ? 'Quản trị viên' : 'Người dùng thường'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
+            <Text style={styles.signupButtonText}>Đăng ký</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.loginLink}
+            style={styles.loginButton}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.loginText}>
-              Đã có tài khoản? <Text style={styles.loginTextBold}>Đăng nhập</Text>
+            <Text style={styles.loginButtonText}>
+              Đã có tài khoản? Đăng nhập ngay
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -146,43 +164,62 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  content: {
-    flex: 1,
-    padding: 24,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    padding: 20,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
-    textAlign: 'center',
     color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 32,
+    marginTop: 16,
   },
   form: {
     width: '100%',
   },
   inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    paddingHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    height: 50,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    color: '#333',
+  },
+  adminToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  adminToggleActive: {
+    backgroundColor: '#4CAF50',
+  },
+  adminToggleText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#4CAF50',
+  },
+  adminToggleTextActive: {
+    color: '#fff',
   },
   signupButton: {
     backgroundColor: '#4CAF50',
@@ -195,19 +232,15 @@ const styles = StyleSheet.create({
   signupButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  loginLink: {
-    marginTop: 24,
+  loginButton: {
+    marginTop: 16,
     alignItems: 'center',
   },
-  loginText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  loginTextBold: {
+  loginButtonText: {
     color: '#4CAF50',
-    fontWeight: '600',
+    fontSize: 16,
   },
 });
 

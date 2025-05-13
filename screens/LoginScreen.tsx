@@ -4,17 +4,18 @@ import {
   View,
   Text,
   TextInput,
+  TouchableOpacity,
   StyleSheet,
   Alert,
-  TouchableOpacity,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { auth } from '../utils/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -22,84 +23,90 @@ const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState<boolean>(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
-
-    setLoading(true);
     try {
-      const result = await auth.login(email, password);
-      if (result.success) {
-        navigation.replace('Home');
-      } else {
-        Alert.alert('Lỗi', result.message);
+      if (!email || !password) {
+        Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+        return;
       }
-    } catch (error: any) {
-      Alert.alert('Lỗi đăng nhập', error.message);
-    } finally {
-      setLoading(false);
+
+      const usersData = await AsyncStorage.getItem('users');
+      if (!usersData) {
+        Alert.alert('Lỗi', 'Tài khoản không tồn tại');
+        return;
+      }
+
+      const users = JSON.parse(usersData);
+      const user = users.find((u: any) => u.email === email && u.password === password);
+
+      if (!user) {
+        Alert.alert('Lỗi', 'Email hoặc mật khẩu không đúng');
+        return;
+      }
+
+      await AsyncStorage.setItem('userEmail', email);
+      
+      if (user.isAdmin) {
+        navigation.replace('Admin');
+      } else {
+        navigation.replace('Home');
+      }
+    } catch (error) {
+      console.error('Error during login:', error);
+      Alert.alert('Lỗi', 'Không thể đăng nhập. Vui lòng thử lại.');
     }
   };
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>Đăng nhập</Text>
-        <Text style={styles.subtitle}>Chào mừng bạn quay trở lại!</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Icon name="restaurant" size={64} color="#4CAF50" />
+          <Text style={styles.title}>Đăng nhập</Text>
+        </View>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <Icon name="email" size={24} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nhập email của bạn"
-              keyboardType="email-address"
-              autoCapitalize="none"
+              placeholder="Email"
               value={email}
               onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mật khẩu</Text>
+            <Icon name="lock" size={24} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nhập mật khẩu của bạn"
-              secureTextEntry
+              placeholder="Mật khẩu"
               value={password}
               onChangeText={setPassword}
+              secureTextEntry
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Đăng nhập</Text>
-            )}
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+            <Text style={styles.loginButtonText}>Đăng nhập</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.signupLink}
+            style={styles.signupButton}
             onPress={() => navigation.navigate('Signup')}
           >
-            <Text style={styles.signupText}>
-              Chưa có tài khoản? <Text style={styles.signupTextBold}>Đăng ký</Text>
+            <Text style={styles.signupButtonText}>
+              Chưa có tài khoản? Đăng ký ngay
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -109,43 +116,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  content: {
-    flex: 1,
-    padding: 24,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    padding: 20,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
-    textAlign: 'center',
     color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 32,
+    marginTop: 16,
   },
   form: {
     width: '100%',
   },
   inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    paddingHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    height: 50,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    color: '#333',
   },
   loginButton: {
     backgroundColor: '#4CAF50',
@@ -158,19 +163,15 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  signupLink: {
-    marginTop: 24,
+  signupButton: {
+    marginTop: 16,
     alignItems: 'center',
   },
-  signupText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  signupTextBold: {
+  signupButtonText: {
     color: '#4CAF50',
-    fontWeight: '600',
+    fontSize: 16,
   },
 });
 
