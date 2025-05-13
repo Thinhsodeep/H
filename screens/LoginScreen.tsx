@@ -25,36 +25,43 @@ const LoginScreen: React.FC = () => {
   const [password, setPassword] = useState('');
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+      return;
+    }
+
     try {
-      if (!email || !password) {
-        Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
-        return;
-      }
-
       const usersData = await AsyncStorage.getItem('users');
-      if (!usersData) {
-        Alert.alert('Lỗi', 'Tài khoản không tồn tại');
-        return;
-      }
+      if (usersData) {
+        const users = JSON.parse(usersData);
+        const user = users.find((u: any) => u.email === email && u.password === password);
 
-      const users = JSON.parse(usersData);
-      const user = users.find((u: any) => u.email === email && u.password === password);
+        if (user) {
+          // Lưu thông tin user vào AsyncStorage
+          const userData = {
+            id: user.id || user.email, // Sử dụng email làm id nếu không có id
+            email: user.email,
+            name: user.name || user.email,
+            role: user.isAdmin ? 'admin' : 'user' // Chuyển đổi isAdmin thành role
+          };
+          
+          console.log('Saving user data:', userData);
+          await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
-      if (!user) {
-        Alert.alert('Lỗi', 'Email hoặc mật khẩu không đúng');
-        return;
-      }
-
-      await AsyncStorage.setItem('userEmail', email);
-      
-      if (user.isAdmin) {
-        navigation.replace('Admin');
+          if (user.isAdmin) {
+            navigation.replace('Admin');
+          } else {
+            navigation.replace('Home');
+          }
+        } else {
+          Alert.alert('Lỗi', 'Email hoặc mật khẩu không đúng');
+        }
       } else {
-        navigation.replace('Home');
+        Alert.alert('Lỗi', 'Không tìm thấy tài khoản');
       }
     } catch (error) {
       console.error('Error during login:', error);
-      Alert.alert('Lỗi', 'Không thể đăng nhập. Vui lòng thử lại.');
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi đăng nhập');
     }
   };
 

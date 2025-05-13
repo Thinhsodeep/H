@@ -14,6 +14,10 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'react-native-image-picker';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '../App';
+
+type FoodManagementScreenRouteProp = RouteProp<RootStackParamList, 'FoodManagement'>;
 
 interface Food {
   id: string;
@@ -23,31 +27,9 @@ interface Food {
   imageBase64: string;
 }
 
-const sampleImages = [
-  {
-    id: '1',
-    name: 'Phở bò',
-    calories: 450,
-    category: 'Ăn sáng',
-    imageBase64: 'https://example.com/pho.jpg', // Placeholder URL
-  },
-  {
-    id: '2',
-    name: 'Cơm sườn',
-    calories: 650,
-    category: 'Ăn trưa',
-    imageBase64: 'https://example.com/com-suon.jpg', // Placeholder URL
-  },
-  {
-    id: '3',
-    name: 'Bún chả',
-    calories: 550,
-    category: 'Ăn trưa',
-    imageBase64: 'https://example.com/bun-cha.jpg', // Placeholder URL
-  },
-];
-
 const FoodManagementScreen: React.FC = () => {
+  const route = useRoute<FoodManagementScreenRouteProp>();
+  const userId = route.params?.userId || 'default';
   const [foods, setFoods] = useState<Food[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
@@ -60,18 +42,42 @@ const FoodManagementScreen: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
+    validateAndFixData();
     loadFoods();
-  }, []);
+  }, [userId]);
+
+  const getStorageKey = () => {
+    // Nếu là admin, sử dụng key chung
+    if (userId === 'admin') {
+      return 'foods_global';
+    }
+    // Nếu là user thường, sử dụng key riêng
+    return `foods_${userId}`;
+  };
 
   const loadFoods = async () => {
     try {
-      const foodsData = await AsyncStorage.getItem('foods');
-      if (!foodsData) {
-        // Nếu chưa có dữ liệu, khởi tạo với dữ liệu mẫu
-        await AsyncStorage.setItem('foods', JSON.stringify(sampleImages));
-        setFoods(sampleImages);
+      console.log('Loading foods for userId:', userId);
+      const foodsData = await AsyncStorage.getItem('foods_global');
+      console.log('Foods data from storage:', foodsData);
+
+      if (foodsData) {
+        try {
+          const parsedFoods = JSON.parse(foodsData);
+          console.log('Parsed foods:', parsedFoods);
+          if (Array.isArray(parsedFoods)) {
+            setFoods(parsedFoods);
+          } else {
+            console.error('Invalid foods data format');
+            setFoods([]);
+          }
+        } catch (e) {
+          console.error('Error parsing foods data:', e);
+          setFoods([]);
+        }
       } else {
-        setFoods(JSON.parse(foodsData));
+        console.log('No foods data found');
+        setFoods([]);
       }
     } catch (error) {
       console.error('Error loading foods:', error);
@@ -83,8 +89,9 @@ const FoodManagementScreen: React.FC = () => {
     const options = {
       mediaType: 'photo' as const,
       includeBase64: true,
-      maxHeight: 800,
-      maxWidth: 800,
+      maxHeight: 200,
+      maxWidth: 200,
+      quality: 0.3 as const,
     };
 
     ImagePicker.launchImageLibrary(options, (response) => {
@@ -118,8 +125,29 @@ const FoodManagementScreen: React.FC = () => {
         imageBase64: selectedImage || '',
       };
 
-      const updatedFoods = [...foods, newFoodItem];
-      await AsyncStorage.setItem('foods', JSON.stringify(updatedFoods));
+      console.log('Saving new food item:', newFoodItem);
+
+      // Lấy dữ liệu hiện tại từ AsyncStorage
+      const existingFoodsData = await AsyncStorage.getItem('foods_global');
+      let currentFoods: Food[] = [];
+      
+      if (existingFoodsData) {
+        try {
+          currentFoods = JSON.parse(existingFoodsData);
+          console.log('Existing foods:', currentFoods);
+        } catch (e) {
+          console.error('Error parsing existing foods:', e);
+        }
+      }
+
+      // Thêm món ăn mới vào danh sách hiện tại
+      const updatedFoods = [...currentFoods, newFoodItem];
+      console.log('Updated foods list:', updatedFoods);
+
+      // Lưu danh sách đã cập nhật vào AsyncStorage
+      await AsyncStorage.setItem('foods_global', JSON.stringify(updatedFoods));
+      
+      // Cập nhật state
       setFoods(updatedFoods);
       setModalVisible(false);
       setNewFood({ name: '', calories: 0, category: 'Ăn sáng' });
@@ -134,7 +162,7 @@ const FoodManagementScreen: React.FC = () => {
   const deleteFood = async (id: string) => {
     try {
       const updatedFoods = foods.filter(food => food.id !== id);
-      await AsyncStorage.setItem('foods', JSON.stringify(updatedFoods));
+      await AsyncStorage.setItem('foods_global', JSON.stringify(updatedFoods));
       setFoods(updatedFoods);
       Alert.alert('Thành công', 'Đã xóa món ăn');
     } catch (error) {
@@ -195,6 +223,28 @@ const FoodManagementScreen: React.FC = () => {
       </View>
     </View>
   );
+
+  const validateAndFixData = async () => {
+    try {
+      const foodsData = await AsyncStorage.getItem(getStorageKey());
+      if (foodsData) {
+        try {
+          const parsedFoods = JSON.parse(foodsData);
+          if (!Array.isArray(parsedFoods)) {
+            // Nếu dữ liệu không phải mảng, xóa và tạo mảng mới
+            await AsyncStorage.setItem(getStorageKey(), JSON.stringify([]));
+            setFoods([]);
+          }
+        } catch (e) {
+          // Nếu có lỗi parse, xóa dữ liệu cũ
+          await AsyncStorage.setItem(getStorageKey(), JSON.stringify([]));
+          setFoods([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error validating data:', error);
+    }
+  };
 
   return (
     <View style={styles.container}>

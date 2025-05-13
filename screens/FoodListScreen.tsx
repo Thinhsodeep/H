@@ -5,8 +5,10 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
   Image,
+  TextInput,
+  ScrollView,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,37 +30,100 @@ interface Food {
 const FoodListScreen: React.FC = () => {
   const navigation = useNavigation<FoodListScreenNavigationProp>();
   const route = useRoute<FoodListScreenRouteProp>();
+  const { category, calories: routeCalories, goal } = route.params || {};
   const [foods, setFoods] = useState<Food[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(category || null);
+  const [calories, setCalories] = useState<number | null>(routeCalories || null);
+  const [userId, setUserId] = useState<string>('');
 
   useEffect(() => {
-    loadFoods();
+    const getUserId = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        console.log('User data from storage:', userData);
+        if (userData) {
+          const parsedUserData = JSON.parse(userData);
+          console.log('Parsed user data:', parsedUserData);
+          setUserId(parsedUserData.role === 'admin' ? 'admin' : parsedUserData.id);
+        }
+      } catch (error) {
+        console.error('Error getting user ID:', error);
+        setUserId('default');
+      }
+    };
+    getUserId();
   }, []);
+
+  useEffect(() => {
+    console.log('userId changed:', userId);
+    if (userId) {
+      loadFoods();
+    }
+  }, [userId, selectedCategory, calories]);
 
   const loadFoods = async () => {
     try {
-      const foodsData = await AsyncStorage.getItem('foods');
-      if (foodsData) {
-        const parsedFoods = JSON.parse(foodsData);
-        setFoods(parsedFoods);
+      console.log('Loading foods for userId:', userId);
+      
+      // Lấy dữ liệu global
+      const globalFoodsData = await AsyncStorage.getItem('foods_global');
+      console.log('Global foods data:', globalFoodsData);
+
+      let foods: Food[] = [];
+
+      // Thêm dữ liệu global
+      if (globalFoodsData) {
+        try {
+          const parsedGlobalFoods = JSON.parse(globalFoodsData);
+          console.log('Parsed global foods:', parsedGlobalFoods);
+          if (Array.isArray(parsedGlobalFoods)) {
+            foods = [...parsedGlobalFoods];
+          }
+        } catch (e) {
+          console.error('Error parsing global foods:', e);
+        }
       }
+
+      // Nếu là admin, lấy thêm dữ liệu riêng
+      if (userId === 'admin') {
+        const adminFoodsData = await AsyncStorage.getItem('foods_admin');
+        if (adminFoodsData) {
+          try {
+            const parsedAdminFoods = JSON.parse(adminFoodsData);
+            if (Array.isArray(parsedAdminFoods)) {
+              foods = [...foods, ...parsedAdminFoods];
+            }
+          } catch (e) {
+            console.error('Error parsing admin foods:', e);
+          }
+        }
+      }
+
+      // Lọc theo category nếu có
+      if (selectedCategory) {
+        foods = foods.filter(food => food.category === selectedCategory);
+      }
+
+      // Lọc theo calories nếu có
+      if (calories) {
+        foods = foods.filter(food => food.calories <= calories);
+      }
+
+      // Sắp xếp theo calories
+      foods.sort((a, b) => a.calories - b.calories);
+
+      console.log('Final foods list:', foods);
+      setFoods(foods);
     } catch (error) {
       console.error('Error loading foods:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách món ăn');
     }
   };
 
-  const categories = [
-    { id: 'all', name: 'Tất cả', icon: 'restaurant' },
-    { id: 'breakfast', name: 'Ăn sáng', icon: 'free-breakfast' },
-    { id: 'lunch', name: 'Ăn trưa', icon: 'lunch-dining' },
-    { id: 'dinner', name: 'Ăn tối', icon: 'dinner-dining' },
-    { id: 'snack', name: 'Đồ ăn nhẹ', icon: 'bakery-dining' },
-  ];
-
   const filteredFoods = foods.filter(food => {
     const matchesSearch = food.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || food.category === selectedCategory;
+    const matchesCategory = !selectedCategory || food.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -85,45 +150,58 @@ const FoodListScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
+  const categories = ['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'];
+
   return (
     <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <View style={styles.searchContainer}>
-          <Icon name="search" size={24} color="#666" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm kiếm món ăn..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+      <View style={styles.searchContainer}>
+        <Icon name="search" size={24} color="#666" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Tìm kiếm món ăn..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
 
-        <View style={styles.categoriesContainer}>
+      <View style={styles.categoryContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              !selectedCategory && styles.selectedCategory,
+            ]}
+            onPress={() => setSelectedCategory(null)}
+          >
+            <Text
+              style={[
+                styles.categoryText,
+                !selectedCategory && styles.selectedCategoryText,
+              ]}
+            >
+              Tất cả
+            </Text>
+          </TouchableOpacity>
           {categories.map(category => (
             <TouchableOpacity
-              key={category.id}
+              key={category}
               style={[
                 styles.categoryButton,
-                selectedCategory === category.id && styles.selectedCategory,
+                selectedCategory === category && styles.selectedCategory,
               ]}
-              onPress={() => setSelectedCategory(category.id)}
+              onPress={() => setSelectedCategory(category)}
             >
-              <Icon
-                name={category.icon}
-                size={24}
-                color={selectedCategory === category.id ? '#fff' : '#4CAF50'}
-              />
               <Text
                 style={[
                   styles.categoryText,
-                  selectedCategory === category.id && styles.selectedCategoryText,
+                  selectedCategory === category && styles.selectedCategoryText,
                 ]}
               >
-                {category.name}
+                {category}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       <FlatList
@@ -141,12 +219,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  headerContainer: {
-    backgroundColor: '#fff',
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -160,27 +232,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  categoriesContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 8,
+  categoryContainer: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   categoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginHorizontal: 4,
   },
   selectedCategory: {
     backgroundColor: '#4CAF50',
   },
   categoryText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#4CAF50',
+    color: '#666',
   },
   selectedCategoryText: {
     color: '#fff',
@@ -190,25 +258,28 @@ const styles = StyleSheet.create({
   },
   foodItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
     marginBottom: 8,
-    overflow: 'hidden',
+    padding: 12,
   },
   foodImage: {
-    width: 100,
-    height: 100,
+    width: 60,
+    height: 60,
+    borderRadius: 8,
   },
   foodImagePlaceholder: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#f0f0f0',
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#e0e0e0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   foodInfo: {
     flex: 1,
-    padding: 12,
+    marginLeft: 12,
   },
   foodName: {
     fontSize: 16,
@@ -218,12 +289,12 @@ const styles = StyleSheet.create({
   foodCalories: {
     fontSize: 14,
     color: '#4CAF50',
-    marginTop: 4,
+    marginTop: 2,
   },
   foodCategory: {
     fontSize: 14,
     color: '#666',
-    marginTop: 4,
+    marginTop: 2,
   },
 });
 

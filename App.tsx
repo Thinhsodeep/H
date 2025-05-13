@@ -44,7 +44,7 @@ export type RootStackParamList = {
   };
   Admin: undefined;
   UserManagement: undefined;
-  FoodManagement: undefined;
+  FoodManagement: { userId: string };
   Statistics: undefined;
 };
 
