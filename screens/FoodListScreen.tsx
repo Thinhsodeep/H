@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  ScrollView,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,49 +29,49 @@ export const mockFoods: Food[] = [
   {
     id: '1',
     name: 'Phở bò',
-    calories: 550,
+    calories: 650,
     category: 'Ăn sáng',
     imageUrl: 'https://assets.tmecosys.com/image/upload/t_web_rdp_recipe_584x480_1_5x/img/recipe/ras/Assets/DE1752E4-0B71-4F56-8D65-8DE586E0B930/Derivates/E501E84F-FD9A-40D9-AC4A-B6ECC7AB4882.jpg',
   },
   {
     id: '2',
     name: 'Bánh mì thịt',
-    calories: 480,
+    calories: 580,
     category: 'Ăn sáng',
     imageUrl: 'https://banhmibahuynh.vn/wp-content/uploads/2022/11/Banh-mi-Ba-Huynh-o-moi-1.webp',
   },
   {
     id: '3',
     name: 'Xôi mặn',
-    calories: 520,
+    calories: 620,
     category: 'Ăn sáng',
     imageUrl: 'https://bepxua.vn/wp-content/uploads/2022/04/cach-nau-xoi-man.jpg',
   },
   {
     id: '4',
     name: 'Bún bò Huế',
-    calories: 580,
+    calories: 680,
     category: 'Ăn sáng',
     imageUrl: 'https://i.ytimg.com/vi/CSI9ildGX9s/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLCxhRIyoYY7k9ZuxY0YOC9jNFLapg',
   },
   {
     id: '5',
     name: 'Cháo lòng',
-    calories: 450,
+    calories: 550,
     category: 'Ăn sáng',
     imageUrl: 'https://icdn.dantri.com.vn/thumb_w/680/2024/01/31/quan-chao-long-ngon-o-ha-noi-16124886805101388065702-1706704946707.jpg',
   },
   {
     id: '6',
     name: 'Bún riêu cua',
-    calories: 500,
+    calories: 600,
     category: 'Ăn sáng',
     imageUrl: 'https://cdn.tgdd.vn/2020/08/CookProduct/Untitled-1-1200x676-10.jpg',
   },
   {
     id: '7',
     name: 'Bánh cuốn',
-    calories: 480,
+    calories: 580,
     category: 'Ăn sáng',
     imageUrl: 'https://feedthepudge.com/wp-content/uploads/2025/02/Banh-Cuon-Cover--1024x683.webp',
   },
@@ -215,13 +216,22 @@ const FoodListScreen: React.FC = () => {
   const navigation = useNavigation<FoodListScreenNavigationProp>();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredFoods, setFilteredFoods] = useState<Food[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>(route.params?.category || 'Tất cả');
+
+  const categories = [
+    { id: 'all', name: 'Tất cả' },
+    { id: 'breakfast', name: 'Ăn sáng' },
+    { id: 'lunch', name: 'Ăn trưa' },
+    { id: 'dinner', name: 'Ăn tối' },
+    { id: 'snack', name: 'Ăn vặt' },
+  ];
 
   useEffect(() => {
     let foods = mockFoods;
 
     // Lọc theo danh mục
-    if (route.params?.category && route.params.category !== 'Tất cả') {
-      foods = foods.filter(food => food.category === route.params.category);
+    if (selectedCategory !== 'Tất cả') {
+      foods = foods.filter(food => food.category === selectedCategory);
     }
 
     // Lọc theo mục tiêu calo và mục tiêu (giảm/tăng cân)
@@ -249,7 +259,7 @@ const FoodListScreen: React.FC = () => {
     }
 
     setFilteredFoods(foods);
-  }, [route.params, searchQuery]);
+  }, [route.params, searchQuery, selectedCategory]);
 
   const renderItem = ({ item }: { item: Food }) => (
     <TouchableOpacity
@@ -269,14 +279,46 @@ const FoodListScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
+  const renderCategoryButton = (category: { id: string; name: string }) => (
+    <TouchableOpacity
+      key={category.id}
+      style={[
+        styles.categoryButton,
+        selectedCategory === category.name && styles.selectedCategoryButton,
+      ]}
+      onPress={() => setSelectedCategory(category.name)}
+    >
+      <Text
+        style={[
+          styles.categoryButtonText,
+          selectedCategory === category.name && styles.selectedCategoryButtonText,
+        ]}
+      >
+        {category.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Tìm kiếm món ăn..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
+      <View style={styles.headerContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Tìm kiếm món ăn..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesContainer}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {categories.map(renderCategoryButton)}
+        </ScrollView>
+      </View>
+
       <FlatList
         data={filteredFoods}
         renderItem={renderItem}
@@ -292,6 +334,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  headerContainer: {
+    backgroundColor: '#fff',
+    paddingTop: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
   searchInput: {
     height: 50,
     borderWidth: 1,
@@ -301,6 +349,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
+  },
+  categoriesContainer: {
+    maxHeight: 65,
+    marginBottom: 12,
+  },
+  categoriesContent: {
+    paddingHorizontal: 16,
+    gap: 10,
   },
   listContainer: {
     padding: 16,
@@ -343,6 +399,33 @@ const styles = StyleSheet.create({
   foodCategory: {
     fontSize: 14,
     color: '#888',
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    backgroundColor: '#f5f5f5',
+    marginRight: 10,
+    width: 140,
+    height: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  selectedCategoryButton: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  categoryButtonText: {
+    fontSize: 15,
+    color: '#666',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  selectedCategoryButtonText: {
+    color: '#2E7D32',
+    fontWeight: '600',
   },
 });
 

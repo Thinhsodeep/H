@@ -10,21 +10,23 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase/config';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
+import { auth } from '../utils/auth';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
+type SignupScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Signup'>;
 
-const SignupScreen: React.FC<Props> = ({ navigation }) => {
+const SignupScreen: React.FC = () => {
+  const navigation = useNavigation<SignupScreenNavigationProp>();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
       return;
     }
@@ -41,13 +43,17 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
 
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert('Thành công', 'Đăng ký thành công', [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('Login'),
-        },
-      ]);
+      const result = await auth.register(email, password, name);
+      if (result.success) {
+        Alert.alert('Thành công', 'Đăng ký thành công. Vui lòng đăng nhập.', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Login'),
+          },
+        ]);
+      } else {
+        Alert.alert('Lỗi', result.message);
+      }
     } catch (error: any) {
       Alert.alert('Lỗi đăng ký', error.message);
     } finally {
@@ -65,6 +71,16 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.subtitle}>Tạo tài khoản để bắt đầu</Text>
 
         <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Họ tên</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập họ tên của bạn"
+              value={name}
+              onChangeText={setName}
+            />
+          </View>
+
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput

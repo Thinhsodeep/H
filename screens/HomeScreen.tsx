@@ -1,13 +1,41 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  useEffect(() => {
+    const getUserEmail = async () => {
+      try {
+        const email = await AsyncStorage.getItem('userEmail');
+        if (email) {
+          setUserEmail(email);
+        }
+      } catch (error) {
+        console.error('Error getting user email:', error);
+      }
+    };
+
+    getUserEmail();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('userEmail');
+      navigation.replace('Login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
+    }
+  };
 
   const categories = [
     { id: '1', name: 'Ăn sáng', icon: '🌅' },
@@ -25,35 +53,39 @@ const HomeScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Chào mừng đến với FoodApp</Text>
-        <Text style={styles.subtitle}>Khám phá các món ăn ngon</Text>
-      </View>
-
-      <View style={styles.categoriesContainer}>
-        <Text style={styles.sectionTitle}>Danh mục món ăn</Text>
-        <View style={styles.categoriesGrid}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={styles.categoryCard}
-              onPress={() => handleCategoryPress(category.name)}
-            >
-              <Text style={styles.categoryIcon}>{category.icon}</Text>
-              <Text style={styles.categoryName}>{category.name}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.userInfo}>
+          <Icon name="account-circle" size={24} color="#4CAF50" />
+          <Text style={styles.userEmail}>{userEmail}</Text>
         </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Icon name="logout" size={24} color="#4CAF50" />
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.healthCalculatorButton}
-        onPress={handleHealthCalculatorPress}
-      >
-        <Text style={styles.healthCalculatorButtonText}>Tính TDEE & BMI</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      <ScrollView style={styles.content}>
+        <Text style={styles.title}>Chào mừng đến với Health App</Text>
+        
+        <View style={styles.menuContainer}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('FoodList', { category: 'Tất cả' })}
+          >
+            <Icon name="restaurant" size={32} color="#4CAF50" />
+            <Text style={styles.menuText}>Danh sách món ăn</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('HealthCalculator')}
+          >
+            <Icon name="calculate" size={32} color="#4CAF50" />
+            <Text style={styles.menuText}>Tính TDEE & BMI</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -63,62 +95,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    padding: 20,
-    backgroundColor: '#4CAF50',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userEmail: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#333',
+  },
+  logoutButton: {
+    padding: 8,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.8,
-  },
-  categoriesContainer: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
     color: '#333',
+    marginBottom: 24,
+    textAlign: 'center',
   },
-  categoriesGrid: {
+  menuContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 16,
   },
-  categoryCard: {
-    width: '48%',
+  menuItem: {
     backgroundColor: '#f5f5f5',
-    borderRadius: 12,
     padding: 20,
-    marginBottom: 16,
+    borderRadius: 12,
     alignItems: 'center',
+    width: '45%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  categoryIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  categoryName: {
+  menuText: {
+    marginTop: 8,
     fontSize: 16,
-    fontWeight: '500',
     color: '#333',
-  },
-  healthCalculatorButton: {
-    backgroundColor: '#2196F3',
-    margin: 20,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  healthCalculatorButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
