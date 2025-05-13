@@ -1,49 +1,112 @@
 // FoodDetailScreen.tsx
-import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+} from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'FoodDetail'>;
+type FoodDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodDetail'>;
+type FoodDetailScreenRouteProp = RouteProp<RootStackParamList, 'FoodDetail'>;
 
-const FoodDetailScreen: React.FC<Props> = ({ route, navigation }) => {
-  // Nhận thông tin món ăn từ tham số
+interface Food {
+  id: string;
+  name: string;
+  calories: number;
+  category: string;
+  imageBase64: string;
+}
+
+const FoodDetailScreen: React.FC = () => {
+  const navigation = useNavigation<FoodDetailScreenNavigationProp>();
+  const route = useRoute<FoodDetailScreenRouteProp>();
   const { food } = route.params;
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  const toggleFavorite = async () => {
+    try {
+      const favoritesData = await AsyncStorage.getItem('favorites');
+      let favorites: Food[] = [];
+      
+      if (favoritesData) {
+        favorites = JSON.parse(favoritesData);
+      }
+
+      if (isFavorite) {
+        favorites = favorites.filter(f => f.id !== food.id);
+      } else {
+        favorites.push(food);
+      }
+
+      await AsyncStorage.setItem('favorites', JSON.stringify(favorites));
+      setIsFavorite(!isFavorite);
+      Alert.alert(
+        'Thành công',
+        isFavorite ? 'Đã xóa khỏi mục yêu thích' : 'Đã thêm vào mục yêu thích'
+      );
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Lỗi', 'Không thể cập nhật mục yêu thích');
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
-      <Image
-        source={{ uri: food.imageUrl }}
-        style={styles.image}
-      />
+      {food.imageBase64 ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${food.imageBase64}` }}
+          style={styles.foodImage}
+        />
+      ) : (
+        <View style={styles.foodImagePlaceholder}>
+          <Icon name="restaurant" size={64} color="#4CAF50" />
+        </View>
+      )}
+
       <View style={styles.content}>
-        <Text style={styles.title}>{food.name}</Text>
-        
-        <View style={styles.infoContainer}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Loại món</Text>
-            <Text style={styles.infoValue}>{food.category}</Text>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Lượng calo</Text>
-            <Text style={styles.infoValue}>{food.calories} cal</Text>
-          </View>
+        <View style={styles.header}>
+          <Text style={styles.foodName}>{food.name}</Text>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={toggleFavorite}
+          >
+            <Icon
+              name={isFavorite ? 'favorite' : 'favorite-border'}
+              size={24}
+              color={isFavorite ? '#FF5252' : '#666'}
+            />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mô tả</Text>
-          <Text style={styles.description}>
-            {food.name} là một món ăn ngon và bổ dưỡng thuộc nhóm {food.category.toLowerCase()}. 
-            Món ăn này cung cấp {food.calories} calo cho mỗi khẩu phần.
-          </Text>
+        <View style={styles.infoContainer}>
+          <View style={styles.infoItem}>
+            <Icon name="local-fire-department" size={24} color="#FF5252" />
+            <Text style={styles.infoText}>{food.calories} calories</Text>
+          </View>
+
+          <View style={styles.infoItem}>
+            <Icon name="category" size={24} color="#4CAF50" />
+            <Text style={styles.infoText}>{food.category}</Text>
+          </View>
         </View>
 
         <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          style={styles.addButton}
+          onPress={() => {
+            // TODO: Implement add to meal plan functionality
+            Alert.alert('Thông báo', 'Tính năng đang được phát triển');
+          }}
         >
-          <Text style={styles.backButtonText}>Trở lại</Text>
+          <Text style={styles.addButtonText}>Thêm vào kế hoạch ăn uống</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -55,67 +118,60 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  image: {
+  foodImage: {
     width: '100%',
-    height: 250,
+    height: 300,
     resizeMode: 'cover',
-    backgroundColor: '#E0E0E0',
+  },
+  foodImagePlaceholder: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
-    padding: 24,
+    padding: 16,
   },
-  title: {
-    fontSize: 28,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  foodName: {
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
     color: '#333',
+    flex: 1,
+  },
+  favoriteButton: {
+    padding: 8,
   },
   infoContainer: {
     flexDirection: 'row',
     marginBottom: 24,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    padding: 16,
   },
   infoItem: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#333',
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#444',
-  },
-  backButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    marginRight: 24,
   },
-  backButtonText: {
+  infoText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#666',
+  },
+  addButton: {
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

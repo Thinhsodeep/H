@@ -8,17 +8,44 @@ import {
   Alert,
   TextInput,
   Modal,
+  Image,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'react-native-image-picker';
 
 interface Food {
   id: string;
   name: string;
   calories: number;
   category: string;
-  imageUrl: string;
+  imageBase64: string;
 }
+
+const sampleImages = [
+  {
+    id: '1',
+    name: 'Phở bò',
+    calories: 450,
+    category: 'Ăn sáng',
+    imageBase64: 'https://example.com/pho.jpg', // Placeholder URL
+  },
+  {
+    id: '2',
+    name: 'Cơm sườn',
+    calories: 650,
+    category: 'Ăn trưa',
+    imageBase64: 'https://example.com/com-suon.jpg', // Placeholder URL
+  },
+  {
+    id: '3',
+    name: 'Bún chả',
+    calories: 550,
+    category: 'Ăn trưa',
+    imageBase64: 'https://example.com/bun-cha.jpg', // Placeholder URL
+  },
+];
 
 const FoodManagementScreen: React.FC = () => {
   const [foods, setFoods] = useState<Food[]>([]);
@@ -28,9 +55,9 @@ const FoodManagementScreen: React.FC = () => {
   const [newFood, setNewFood] = useState<Partial<Food>>({
     name: '',
     calories: 0,
-    category: 'breakfast',
-    imageUrl: '',
+    category: 'Ăn sáng',
   });
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     loadFoods();
@@ -39,7 +66,11 @@ const FoodManagementScreen: React.FC = () => {
   const loadFoods = async () => {
     try {
       const foodsData = await AsyncStorage.getItem('foods');
-      if (foodsData) {
+      if (!foodsData) {
+        // Nếu chưa có dữ liệu, khởi tạo với dữ liệu mẫu
+        await AsyncStorage.setItem('foods', JSON.stringify(sampleImages));
+        setFoods(sampleImages);
+      } else {
         setFoods(JSON.parse(foodsData));
       }
     } catch (error) {
@@ -48,34 +79,52 @@ const FoodManagementScreen: React.FC = () => {
     }
   };
 
-  const saveFood = async () => {
-    try {
-      if (!newFood.name || !newFood.calories || !newFood.category) {
-        Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
-        return;
-      }
+  const handleImagePick = () => {
+    const options = {
+      mediaType: 'photo' as const,
+      includeBase64: true,
+      maxHeight: 800,
+      maxWidth: 800,
+    };
 
-      let updatedFoods;
-      if (editingFood) {
-        updatedFoods = foods.map(food =>
-          food.id === editingFood.id ? { ...newFood, id: food.id } as Food : food
-        );
+    ImagePicker.launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        console.log('User cancelled image picker');
+      } else if (response.errorCode) {
+        console.log('ImagePicker Error: ', response.errorMessage);
+        Alert.alert('Lỗi', 'Không thể chọn hình ảnh');
       } else {
-        const newId = Date.now().toString();
-        updatedFoods = [...foods, { ...newFood, id: newId } as Food];
+        const base64 = response.assets?.[0]?.base64;
+        if (base64) {
+          setSelectedImage(base64);
+          setNewFood(prev => ({ ...prev, imageBase64: base64 }));
+        }
       }
+    });
+  };
 
+  const saveFood = async () => {
+    if (!newFood.name || !newFood.calories || !newFood.category) {
+      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
+      return;
+    }
+
+    try {
+      const newFoodItem: Food = {
+        id: Date.now().toString(),
+        name: newFood.name,
+        calories: Number(newFood.calories),
+        category: newFood.category,
+        imageBase64: selectedImage || '',
+      };
+
+      const updatedFoods = [...foods, newFoodItem];
       await AsyncStorage.setItem('foods', JSON.stringify(updatedFoods));
       setFoods(updatedFoods);
       setModalVisible(false);
-      setEditingFood(null);
-      setNewFood({
-        name: '',
-        calories: 0,
-        category: 'breakfast',
-        imageUrl: '',
-      });
-      Alert.alert('Thành công', 'Đã lưu món ăn');
+      setNewFood({ name: '', calories: 0, category: 'Ăn sáng' });
+      setSelectedImage(null);
+      Alert.alert('Thành công', 'Đã thêm món ăn mới');
     } catch (error) {
       console.error('Error saving food:', error);
       Alert.alert('Lỗi', 'Không thể lưu món ăn');
@@ -106,13 +155,20 @@ const FoodManagementScreen: React.FC = () => {
 
   const renderFoodItem = ({ item }: { item: Food }) => (
     <View style={styles.foodItem}>
-      <View style={styles.foodInfo}>
-        <Icon name="restaurant" size={24} color="#4CAF50" />
-        <View style={styles.foodDetails}>
-          <Text style={styles.foodName}>{item.name}</Text>
-          <Text style={styles.foodCategory}>{item.category}</Text>
-          <Text style={styles.foodCalories}>{item.calories} calories</Text>
+      {item.imageBase64 ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+          style={styles.foodImage}
+        />
+      ) : (
+        <View style={styles.foodImagePlaceholder}>
+          <Icon name="restaurant" size={32} color="#4CAF50" />
         </View>
+      )}
+      <View style={styles.foodInfo}>
+        <Text style={styles.foodName}>{item.name}</Text>
+        <Text style={styles.foodCalories}>{item.calories} calories</Text>
+        <Text style={styles.foodCategory}>{item.category}</Text>
       </View>
       <View style={styles.actions}>
         <TouchableOpacity
@@ -166,8 +222,7 @@ const FoodManagementScreen: React.FC = () => {
           setNewFood({
             name: '',
             calories: 0,
-            category: 'breakfast',
-            imageUrl: '',
+            category: 'Ăn sáng',
           });
           setModalVisible(true);
         }}
@@ -183,15 +238,30 @@ const FoodManagementScreen: React.FC = () => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {editingFood ? 'Chỉnh sửa món ăn' : 'Thêm món ăn mới'}
-            </Text>
+            <Text style={styles.modalTitle}>Thêm món ăn mới</Text>
+            
+            <TouchableOpacity
+              style={styles.imagePickerButton}
+              onPress={handleImagePick}
+            >
+              {selectedImage ? (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${selectedImage}` }}
+                  style={styles.previewImage}
+                />
+              ) : (
+                <View style={styles.imagePickerPlaceholder}>
+                  <Icon name="add-a-photo" size={32} color="#4CAF50" />
+                  <Text style={styles.imagePickerText}>Chọn hình ảnh</Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
             <TextInput
               style={styles.input}
               placeholder="Tên món ăn"
               value={newFood.name}
-              onChangeText={text => setNewFood({ ...newFood, name: text })}
+              onChangeText={(text) => setNewFood(prev => ({ ...prev, name: text }))}
             />
 
             <TextInput
@@ -199,27 +269,39 @@ const FoodManagementScreen: React.FC = () => {
               placeholder="Calories"
               keyboardType="numeric"
               value={newFood.calories?.toString()}
-              onChangeText={text => setNewFood({ ...newFood, calories: parseInt(text) || 0 })}
+              onChangeText={(text) => setNewFood(prev => ({ ...prev, calories: Number(text) }))}
             />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Danh mục (breakfast/lunch/dinner/snack)"
-              value={newFood.category}
-              onChangeText={text => setNewFood({ ...newFood, category: text })}
-            />
+            <View style={styles.categoryContainer}>
+              {['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'].map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={[
+                    styles.categoryButton,
+                    newFood.category === category && styles.selectedCategory,
+                  ]}
+                  onPress={() => setNewFood(prev => ({ ...prev, category }))}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      newFood.category === category && styles.selectedCategoryText,
+                    ]}
+                  >
+                    {category}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="URL hình ảnh"
-              value={newFood.imageUrl}
-              onChangeText={text => setNewFood({ ...newFood, imageUrl: text })}
-            />
-
-            <View style={styles.modalActions}>
+            <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
+                onPress={() => {
+                  setModalVisible(false);
+                  setNewFood({ name: '', calories: 0, category: 'Ăn sáng' });
+                  setSelectedImage(null);
+                }}
               >
                 <Text style={styles.buttonText}>Hủy</Text>
               </TouchableOpacity>
@@ -260,35 +342,42 @@ const styles = StyleSheet.create({
   },
   foodItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
     marginBottom: 8,
+    padding: 12,
+  },
+  foodImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  foodImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   foodInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flex: 1,
-  },
-  foodDetails: {
-    marginLeft: 8,
-    flex: 1,
+    marginLeft: 12,
   },
   foodName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
-  foodCategory: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
   foodCalories: {
     fontSize: 14,
     color: '#4CAF50',
+    marginTop: 2,
+  },
+  foodCategory: {
+    fontSize: 14,
+    color: '#666',
     marginTop: 2,
   },
   actions: {
@@ -322,15 +411,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    width: '90%',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    width: '90%',
+    maxHeight: '80%',
   },
   modalTitle: {
     fontSize: 20,
@@ -344,13 +429,34 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 16,
     fontSize: 16,
   },
-  modalActions: {
+  categoryContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  selectedCategory: {
+    backgroundColor: '#4CAF50',
+  },
+  categoryText: {
+    color: '#666',
+  },
+  selectedCategoryText: {
+    color: '#fff',
+  },
+  modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 16,
   },
   modalButton: {
     flex: 1,
@@ -359,7 +465,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   cancelButton: {
-    backgroundColor: '#FF5252',
+    backgroundColor: '#f5f5f5',
   },
   saveButton: {
     backgroundColor: '#4CAF50',
@@ -369,6 +475,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  imagePickerButton: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  imagePickerPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePickerText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
 });
 

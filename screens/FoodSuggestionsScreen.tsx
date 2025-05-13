@@ -3,146 +3,143 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
+  Image,
+  Alert,
 } from 'react-native';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { mockFoods } from './FoodListScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
-type FoodSuggestionsScreenRouteProp = RouteProp<RootStackParamList, 'FoodSuggestions'>;
 type FoodSuggestionsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodSuggestions'>;
+type FoodSuggestionsScreenRouteProp = RouteProp<RootStackParamList, 'FoodSuggestions'>;
 
-interface SuggestedMeal {
-  breakfast: typeof mockFoods;
-  lunch: typeof mockFoods;
-  dinner: typeof mockFoods;
-  snacks: typeof mockFoods;
-  totalCalories: number;
+interface Food {
+  id: string;
+  name: string;
+  calories: number;
+  category: string;
+  imageBase64: string;
 }
 
 const FoodSuggestionsScreen: React.FC = () => {
-  const route = useRoute<FoodSuggestionsScreenRouteProp>();
   const navigation = useNavigation<FoodSuggestionsScreenNavigationProp>();
-  const [suggestedMeal, setSuggestedMeal] = useState<SuggestedMeal | null>(null);
-
-  const targetCalories = route.params?.targetCalories || 2000;
-  const goal = route.params?.goal || 'maintain';
-
-  // Sắp xếp món ăn theo calo
-  const sortFoodsByCalories = (foods: typeof mockFoods, targetCal: number, isGain: boolean) => {
-    return [...foods].sort((a, b) => {
-      const diffA = Math.abs(a.calories - targetCal);
-      const diffB = Math.abs(b.calories - targetCal);
-      return isGain ? diffA - diffB : diffB - diffA;
-    });
-  };
-
-  const selectMeals = (foods: typeof mockFoods, targetCalories: number, isGain: boolean) => {
-    const sortedFoods = sortFoodsByCalories(foods, targetCalories, isGain);
-    const selected: typeof mockFoods = [];
-    let currentCalories = 0;
-
-    for (const food of sortedFoods) {
-      if (currentCalories + food.calories <= targetCalories * 1.1) { // Cho phép vượt 10%
-        selected.push(food);
-        currentCalories += food.calories;
-      }
-      if (currentCalories >= targetCalories * 0.9) break; // Đạt ít nhất 90% mục tiêu
-    }
-
-    return selected;
-  };
-
-  const generateMealPlan = () => {
-    const breakfastFoods = mockFoods.filter(food => food.category === 'Ăn sáng');
-    const lunchFoods = mockFoods.filter(food => food.category === 'Ăn trưa');
-    const dinnerFoods = mockFoods.filter(food => food.category === 'Ăn tối');
-    const snackFoods = mockFoods.filter(food => food.category === 'Ăn vặt');
-
-    // Phân bổ calo cho các bữa ăn
-    const breakfastCalories = Math.round(targetCalories * 0.3); // 30% calo cho bữa sáng
-    const lunchCalories = Math.round(targetCalories * 0.35); // 35% calo cho bữa trưa
-    const dinnerCalories = Math.round(targetCalories * 0.25); // 25% calo cho bữa tối
-    const snackCalories = Math.round(targetCalories * 0.1); // 10% calo cho ăn vặt
-
-    const isGain = goal === 'gain';
-
-    // Chọn món ăn cho từng bữa
-    const selectedBreakfast = selectMeals(breakfastFoods, breakfastCalories, isGain);
-    const selectedLunch = selectMeals(lunchFoods, lunchCalories, isGain);
-    const selectedDinner = selectMeals(dinnerFoods, dinnerCalories, isGain);
-    const selectedSnacks = selectMeals(snackFoods, snackCalories, isGain);
-
-    const totalCalories = [...selectedBreakfast, ...selectedLunch, ...selectedDinner, ...selectedSnacks]
-      .reduce((sum, food) => sum + food.calories, 0);
-
-    setSuggestedMeal({
-      breakfast: selectedBreakfast,
-      lunch: selectedLunch,
-      dinner: selectedDinner,
-      snacks: selectedSnacks,
-      totalCalories,
-    });
-  };
+  const route = useRoute<FoodSuggestionsScreenRouteProp>();
+  const { targetCalories, goal } = route.params;
+  const [suggestedFoods, setSuggestedFoods] = useState<Food[]>([]);
 
   useEffect(() => {
-    generateMealPlan();
-  }, [targetCalories, goal]);
+    loadSuggestedFoods();
+  }, []);
 
-  const renderMealSection = (title: string, foods: typeof mockFoods, totalCalories: number) => (
-    <View style={styles.mealSection}>
-      <Text style={styles.mealTitle}>{title}</Text>
-      <View style={styles.foodList}>
-        {foods.map(food => (
-          <View key={food.id} style={styles.foodItem}>
-            <Text style={styles.foodName}>{food.name}</Text>
-            <Text style={styles.foodCalories}>{food.calories} calo</Text>
-          </View>
-        ))}
+  const loadSuggestedFoods = async () => {
+    try {
+      const foodsData = await AsyncStorage.getItem('foods');
+      if (foodsData) {
+        const allFoods: Food[] = JSON.parse(foodsData);
+        let filteredFoods: Food[] = [];
+
+        // Lọc món ăn dựa trên mục tiêu
+        switch (goal) {
+          case 'lose':
+            filteredFoods = allFoods.filter(food => food.calories <= 500);
+            break;
+          case 'gain':
+            filteredFoods = allFoods.filter(food => food.calories >= 600);
+            break;
+          case 'maintain':
+            filteredFoods = allFoods.filter(food => food.calories >= 400 && food.calories <= 700);
+            break;
+        }
+
+        // Sắp xếp theo calories phù hợp với mục tiêu
+        filteredFoods.sort((a, b) => {
+          if (goal === 'lose') return a.calories - b.calories;
+          if (goal === 'gain') return b.calories - a.calories;
+          return Math.abs(a.calories - targetCalories / 3) - Math.abs(b.calories - targetCalories / 3);
+        });
+
+        setSuggestedFoods(filteredFoods);
+      }
+    } catch (error) {
+      console.error('Error loading suggested foods:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách món ăn gợi ý');
+    }
+  };
+
+  const addToMealPlan = async (food: Food) => {
+    try {
+      const mealPlanData = await AsyncStorage.getItem('mealPlan');
+      let mealPlan: Food[] = [];
+      
+      if (mealPlanData) {
+        mealPlan = JSON.parse(mealPlanData);
+      }
+
+      // Kiểm tra xem món ăn đã có trong thực đơn chưa
+      if (mealPlan.some(item => item.id === food.id)) {
+        Alert.alert('Thông báo', 'Món ăn này đã có trong thực đơn');
+        return;
+      }
+
+      mealPlan.push(food);
+      await AsyncStorage.setItem('mealPlan', JSON.stringify(mealPlan));
+      Alert.alert('Thành công', 'Đã thêm món ăn vào thực đơn');
+    } catch (error) {
+      console.error('Error adding to meal plan:', error);
+      Alert.alert('Lỗi', 'Không thể thêm món ăn vào thực đơn');
+    }
+  };
+
+  const renderFoodItem = ({ item }: { item: Food }) => (
+    <TouchableOpacity
+      style={styles.foodItem}
+      onPress={() => navigation.navigate('FoodDetail', { food: item })}
+    >
+      {item.imageBase64 ? (
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+          style={styles.foodImage}
+        />
+      ) : (
+        <View style={styles.foodImagePlaceholder}>
+          <Icon name="restaurant" size={32} color="#4CAF50" />
+        </View>
+      )}
+      <View style={styles.foodInfo}>
+        <Text style={styles.foodName}>{item.name}</Text>
+        <Text style={styles.foodCalories}>{item.calories} calories</Text>
+        <Text style={styles.foodCategory}>{item.category}</Text>
       </View>
-      <Text style={styles.sectionTotal}>Tổng: {totalCalories} calo</Text>
-    </View>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => addToMealPlan(item)}
+      >
+        <Icon name="add-circle" size={32} color="#4CAF50" />
+      </TouchableOpacity>
+    </TouchableOpacity>
   );
-
-  if (!suggestedMeal) {
-    return (
-      <View style={styles.container}>
-        <Text>Đang tạo thực đơn...</Text>
-      </View>
-    );
-  }
-
-  const breakfastTotal = suggestedMeal.breakfast.reduce((sum, food) => sum + food.calories, 0);
-  const lunchTotal = suggestedMeal.lunch.reduce((sum, food) => sum + food.calories, 0);
-  const dinnerTotal = suggestedMeal.dinner.reduce((sum, food) => sum + food.calories, 0);
-  const snacksTotal = suggestedMeal.snacks.reduce((sum, food) => sum + food.calories, 0);
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {renderMealSection('Ăn sáng', suggestedMeal.breakfast, breakfastTotal)}
-        {renderMealSection('Ăn trưa', suggestedMeal.lunch, lunchTotal)}
-        {renderMealSection('Ăn tối', suggestedMeal.dinner, dinnerTotal)}
-        {renderMealSection('Ăn vặt', suggestedMeal.snacks, snacksTotal)}
-      </ScrollView>
-
-      <View style={styles.summaryContainer}>
-        <Text style={styles.summaryTitle}>Tổng kết</Text>
-        <Text style={styles.calorieText}>
-          Tổng calo: {suggestedMeal.totalCalories} / {targetCalories}
+      <View style={styles.header}>
+        <Text style={styles.title}>Gợi ý món ăn</Text>
+        <Text style={styles.subtitle}>
+          Mục tiêu: {targetCalories} calories/ngày
+          {'\n'}
+          Chế độ: {goal === 'lose' ? 'Giảm cân' : goal === 'gain' ? 'Tăng cân' : 'Duy trì'}
         </Text>
-        <TouchableOpacity
-          style={styles.useMealPlanButton}
-          onPress={() => navigation.navigate('MealPlan', {
-            targetCalories,
-            goal,
-          })}
-        >
-          <Text style={styles.useMealPlanButtonText}>Sử dụng thực đơn này</Text>
-        </TouchableOpacity>
       </View>
+
+      <FlatList
+        data={suggestedFoods}
+        renderItem={renderFoodItem}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContainer}
+      />
     </View>
   );
 };
@@ -152,73 +149,68 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  scrollView: {
-    flex: 1,
-  },
-  mealSection: {
+  header: {
     padding: 16,
+    backgroundColor: '#f5f5f5',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  mealTitle: {
-    fontSize: 20,
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 12,
     color: '#333',
-  },
-  foodList: {
     marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+  },
+  listContainer: {
+    padding: 16,
   },
   foodItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginBottom: 8,
+    padding: 12,
+  },
+  foodImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  foodImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  foodInfo: {
+    flex: 1,
+    marginLeft: 12,
   },
   foodName: {
     fontSize: 16,
+    fontWeight: 'bold',
     color: '#333',
-    flex: 1,
   },
   foodCalories: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#4CAF50',
+    marginTop: 2,
+  },
+  foodCategory: {
+    fontSize: 14,
     color: '#666',
-    marginLeft: 8,
+    marginTop: 2,
   },
-  sectionTotal: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2196F3',
-    marginTop: 8,
-  },
-  summaryContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#333',
-  },
-  calorieText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
-  },
-  useMealPlanButton: {
-    backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  useMealPlanButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  addButton: {
+    padding: 8,
   },
 });
 
