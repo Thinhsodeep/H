@@ -35,7 +35,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Signup">
+      <Stack.Navigator initialRouteName="Home">
         <Stack.Screen name="Signup" component={SignupScreen} options={{ title: 'Đăng ký' }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Đăng nhập' }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Trang chủ' }} />
