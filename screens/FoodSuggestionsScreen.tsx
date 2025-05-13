@@ -8,13 +8,11 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-type FoodSuggestionsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodSuggestions'>;
 type FoodSuggestionsScreenRouteProp = RouteProp<RootStackParamList, 'FoodSuggestions'>;
 
 interface Food {
@@ -26,40 +24,49 @@ interface Food {
 }
 
 const FoodSuggestionsScreen: React.FC = () => {
-  const navigation = useNavigation<FoodSuggestionsScreenNavigationProp>();
   const route = useRoute<FoodSuggestionsScreenRouteProp>();
   const { targetCalories, goal } = route.params;
   const [suggestedFoods, setSuggestedFoods] = useState<Food[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     loadSuggestedFoods();
-  }, []);
+  }, [selectedCategory]);
 
   const loadSuggestedFoods = async () => {
     try {
-      const foodsData = await AsyncStorage.getItem('foods');
+      const foodsData = await AsyncStorage.getItem('foods_global');
       if (foodsData) {
         const allFoods: Food[] = JSON.parse(foodsData);
-        let filteredFoods: Food[] = [];
+        let filteredFoods = allFoods;
 
-        // Lọc món ăn dựa trên mục tiêu
-        switch (goal) {
-          case 'lose':
-            filteredFoods = allFoods.filter(food => food.calories <= 500);
-            break;
-          case 'gain':
-            filteredFoods = allFoods.filter(food => food.calories >= 600);
-            break;
-          case 'maintain':
-            filteredFoods = allFoods.filter(food => food.calories >= 400 && food.calories <= 700);
-            break;
+        // Lọc theo category nếu có
+        if (selectedCategory) {
+          filteredFoods = filteredFoods.filter(food => food.category === selectedCategory);
         }
 
-        // Sắp xếp theo calories phù hợp với mục tiêu
+        // Lọc theo mục tiêu và calories
+        filteredFoods = filteredFoods.filter(food => {
+          switch (goal) {
+            case 'lose':
+              return food.calories <= targetCalories * 0.3; // 30% calories cho mỗi bữa
+            case 'gain':
+              return food.calories >= targetCalories * 0.2; // 20% calories cho mỗi bữa
+            case 'maintain':
+              return food.calories <= targetCalories * 0.25; // 25% calories cho mỗi bữa
+            default:
+              return true;
+          }
+        });
+
+        // Sắp xếp theo calories
         filteredFoods.sort((a, b) => {
-          if (goal === 'lose') return a.calories - b.calories;
-          if (goal === 'gain') return b.calories - a.calories;
-          return Math.abs(a.calories - targetCalories / 3) - Math.abs(b.calories - targetCalories / 3);
+          if (goal === 'lose') {
+            return a.calories - b.calories;
+          } else if (goal === 'gain') {
+            return b.calories - a.calories;
+          }
+          return Math.abs(a.calories - targetCalories * 0.25) - Math.abs(b.calories - targetCalories * 0.25);
         });
 
         setSuggestedFoods(filteredFoods);
@@ -80,11 +87,13 @@ const FoodSuggestionsScreen: React.FC = () => {
       }
 
       // Kiểm tra xem món ăn đã có trong thực đơn chưa
-      if (mealPlan.some(item => item.id === food.id)) {
+      const isDuplicate = mealPlan.some(item => item.id === food.id);
+      if (isDuplicate) {
         Alert.alert('Thông báo', 'Món ăn này đã có trong thực đơn');
         return;
       }
 
+      // Thêm món ăn vào thực đơn
       mealPlan.push(food);
       await AsyncStorage.setItem('mealPlan', JSON.stringify(mealPlan));
       Alert.alert('Thành công', 'Đã thêm món ăn vào thực đơn');
@@ -95,10 +104,7 @@ const FoodSuggestionsScreen: React.FC = () => {
   };
 
   const renderFoodItem = ({ item }: { item: Food }) => (
-    <TouchableOpacity
-      style={styles.foodItem}
-      onPress={() => navigation.navigate('FoodDetail', { food: item })}
-    >
+    <View style={styles.foodItem}>
       {item.imageBase64 ? (
         <Image
           source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
@@ -120,18 +126,49 @@ const FoodSuggestionsScreen: React.FC = () => {
       >
         <Icon name="add-circle" size={32} color="#4CAF50" />
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
+
+  const categories = ['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'];
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Gợi ý món ăn</Text>
-        <Text style={styles.subtitle}>
-          Mục tiêu: {targetCalories} calories/ngày
-          {'\n'}
-          Chế độ: {goal === 'lose' ? 'Giảm cân' : goal === 'gain' ? 'Tăng cân' : 'Duy trì'}
-        </Text>
+      <View style={styles.categoryContainer}>
+        <TouchableOpacity
+          style={[
+            styles.categoryButton,
+            !selectedCategory && styles.selectedCategory,
+          ]}
+          onPress={() => setSelectedCategory(null)}
+        >
+          <Text
+            style={[
+              styles.categoryText,
+              !selectedCategory && styles.selectedCategoryText,
+            ]}
+          >
+            Tất cả
+          </Text>
+        </TouchableOpacity>
+        {categories.map(category => (
+          <TouchableOpacity
+            key={category}
+            style={[
+              styles.categoryButton,
+              selectedCategory === category && styles.selectedCategory,
+            ]}
+            onPress={() => setSelectedCategory(category)}
+          >
+            <Text
+              style={[
+                styles.categoryText,
+                selectedCategory === category && styles.selectedCategoryText,
+              ]}
+            >
+              {category}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <FlatList
@@ -149,22 +186,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  header: {
+  categoryContainer: {
+    flexDirection: 'row',
     padding: 16,
-    backgroundColor: '#f5f5f5',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
   },
-  subtitle: {
-    fontSize: 16,
+  selectedCategory: {
+    backgroundColor: '#4CAF50',
+  },
+  categoryText: {
     color: '#666',
-    lineHeight: 24,
+  },
+  selectedCategoryText: {
+    color: '#fff',
   },
   listContainer: {
     padding: 16,

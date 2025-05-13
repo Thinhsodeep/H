@@ -8,13 +8,11 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-type MealPlanScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MealPlan'>;
 type MealPlanScreenRouteProp = RouteProp<RootStackParamList, 'MealPlan'>;
 
 interface Food {
@@ -26,20 +24,26 @@ interface Food {
 }
 
 const MealPlanScreen: React.FC = () => {
-  const navigation = useNavigation<MealPlanScreenNavigationProp>();
   const route = useRoute<MealPlanScreenRouteProp>();
   const { targetCalories, goal } = route.params;
   const [mealPlan, setMealPlan] = useState<Food[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     loadMealPlan();
-  }, []);
+  }, [selectedCategory]);
 
   const loadMealPlan = async () => {
     try {
       const mealPlanData = await AsyncStorage.getItem('mealPlan');
       if (mealPlanData) {
-        const foods: Food[] = JSON.parse(mealPlanData);
+        let foods: Food[] = JSON.parse(mealPlanData);
+        
+        // Lọc theo category nếu có
+        if (selectedCategory) {
+          foods = foods.filter(food => food.category === selectedCategory);
+        }
+
         setMealPlan(foods);
       }
     } catch (error) {
@@ -62,6 +66,15 @@ const MealPlanScreen: React.FC = () => {
 
   const getTotalCalories = () => {
     return mealPlan.reduce((total, food) => total + food.calories, 0);
+  };
+
+  const getProgressColor = () => {
+    const total = getTotalCalories();
+    const percentage = total / targetCalories;
+    
+    if (percentage < 0.8) return '#FFA726'; // Orange
+    if (percentage > 1.2) return '#EF5350'; // Red
+    return '#4CAF50'; // Green
   };
 
   const renderFoodItem = ({ item }: { item: Food }) => (
@@ -94,41 +107,61 @@ const MealPlanScreen: React.FC = () => {
           );
         }}
       >
-        <Icon name="remove-circle" size={32} color="#FF5252" />
+        <Icon name="remove-circle" size={32} color="#EF5350" />
       </TouchableOpacity>
     </View>
   );
+
+  const categories = ['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'];
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Thực đơn của bạn</Text>
-        <Text style={styles.subtitle}>
-          Mục tiêu: {targetCalories} calories/ngày
-          {'\n'}
-          Chế độ: {goal === 'lose' ? 'Giảm cân' : goal === 'gain' ? 'Tăng cân' : 'Duy trì'}
-        </Text>
         <View style={styles.calorieInfo}>
           <Text style={styles.calorieText}>
-            Tổng calo: {getTotalCalories()} / {targetCalories}
+            Tổng calories: {getTotalCalories()} / {targetCalories}
           </Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min((getTotalCalories() / targetCalories) * 100, 100)}%`,
-                  backgroundColor:
-                    getTotalCalories() > targetCalories
-                      ? '#FF5252'
-                      : getTotalCalories() < targetCalories * 0.9
-                      ? '#FFA726'
-                      : '#4CAF50',
-                },
-              ]}
-            />
-          </View>
+          <View style={[styles.progressBar, { backgroundColor: getProgressColor() }]} />
         </View>
+      </View>
+
+      <View style={styles.categoryContainer}>
+        <TouchableOpacity
+          style={[
+            styles.categoryButton,
+            !selectedCategory && styles.selectedCategory,
+          ]}
+          onPress={() => setSelectedCategory(null)}
+        >
+          <Text
+            style={[
+              styles.categoryText,
+              !selectedCategory && styles.selectedCategoryText,
+            ]}
+          >
+            Tất cả
+          </Text>
+        </TouchableOpacity>
+        {categories.map(category => (
+          <TouchableOpacity
+            key={category}
+            style={[
+              styles.categoryButton,
+              selectedCategory === category && styles.selectedCategory,
+            ]}
+            onPress={() => setSelectedCategory(category)}
+          >
+            <Text
+              style={[
+                styles.categoryText,
+                selectedCategory === category && styles.selectedCategoryText,
+              ]}
+            >
+              {category}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <FlatList
@@ -136,18 +169,6 @@ const MealPlanScreen: React.FC = () => {
         renderItem={renderFoodItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Icon name="restaurant" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>Chưa có món ăn trong thực đơn</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => navigation.navigate('FoodSuggestions', { targetCalories, goal })}
-            >
-              <Text style={styles.addButtonText}>Thêm món ăn</Text>
-            </TouchableOpacity>
-          </View>
-        }
       />
     </View>
   );
@@ -170,29 +191,39 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    lineHeight: 24,
-    marginBottom: 16,
-  },
   calorieInfo: {
     marginTop: 8,
   },
   calorieText: {
     fontSize: 16,
-    color: '#333',
-    marginBottom: 8,
+    color: '#666',
+    marginBottom: 4,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 4,
-    overflow: 'hidden',
+    height: 4,
+    borderRadius: 2,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
+  categoryContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+  },
+  selectedCategory: {
+    backgroundColor: '#4CAF50',
+  },
+  categoryText: {
+    color: '#666',
+  },
+  selectedCategoryText: {
+    color: '#fff',
   },
   listContainer: {
     padding: 16,
@@ -239,29 +270,6 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 16,
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  addButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });
 
