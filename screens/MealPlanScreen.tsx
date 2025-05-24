@@ -8,20 +8,29 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { foodService, Food } from '../config/firebase';
 import auth from '@react-native-firebase/auth';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type MealPlanScreenRouteProp = RouteProp<RootStackParamList, 'MealPlan'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const MealPlanScreen: React.FC = () => {
   const route = useRoute<MealPlanScreenRouteProp>();
+  const navigation = useNavigation<NavigationProp>();
   const { targetCalories, goal } = route.params;
   const [mealPlan, setMealPlan] = useState<Food[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [totalCalories, setTotalCalories] = useState(0);
+
+  useEffect(() => {
+    // Tự động chọn mục Tất cả khi vào màn hình
+    setSelectedCategory(null);
+    loadMealPlan();
+  }, []);
 
   useEffect(() => {
     loadMealPlan();
@@ -175,6 +184,13 @@ const MealPlanScreen: React.FC = () => {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
       />
+
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => navigation.navigate('FoodSuggestions', { targetCalories, goal })}
+      >
+        <Icon name="add" size={32} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -275,6 +291,22 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: 8,
+  },
+  addButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
 });
 
