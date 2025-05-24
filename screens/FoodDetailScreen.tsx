@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { foodService, Food } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
 
 type FoodDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodDetail'>;
 type FoodDetailScreenRouteProp = RouteProp<RootStackParamList, 'FoodDetail'>;
@@ -31,7 +32,10 @@ const FoodDetailScreen: React.FC = () => {
 
   const checkMealPlanStatus = async () => {
     try {
-      const mealPlan = await foodService.getMealPlan();
+      const userId = auth().currentUser?.uid;
+      if (!userId) return;
+
+      const mealPlan = await foodService.getMealPlan(userId);
       setIsInMealPlan(mealPlan.some(item => item.id === food.id));
     } catch (error) {
       console.error('Error checking meal plan status:', error);
@@ -53,12 +57,18 @@ const FoodDetailScreen: React.FC = () => {
 
   const addToMealPlan = async () => {
     try {
+      const userId = auth().currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để thêm món ăn vào thực đơn');
+        return;
+      }
+
       if (isInMealPlan) {
-        await foodService.removeFromMealPlan(food.id);
+        await foodService.removeFromMealPlan(userId, food.id);
         setIsInMealPlan(false);
         Alert.alert('Thành công', 'Đã xóa khỏi kế hoạch ăn uống');
       } else {
-        await foodService.addToMealPlan(food);
+        await foodService.addToMealPlan(userId, food);
         setIsInMealPlan(true);
         Alert.alert('Thành công', 'Đã thêm vào kế hoạch ăn uống');
       }

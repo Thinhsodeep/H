@@ -1,6 +1,7 @@
 import { initializeApp, getApp, getApps } from '@react-native-firebase/app';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { getFirestore, collection, doc, getDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyAouLVyFRvanwzSdGfaUONzK1e_-aL6e8Q',
@@ -34,6 +35,14 @@ export interface Food {
   calories: number;
   category: string;
   imageBase64: string;
+}
+
+export interface UserHealthInfo {
+  userId: string;
+  tdee: number;
+  goal: 'lose' | 'gain' | 'maintain';
+  targetCalories: number;
+  lastUpdated: Date;
 }
 
 // Food related functions
@@ -127,9 +136,12 @@ export const foodService = {
   },
 
   // Get meal plan
-  getMealPlan: async (): Promise<Food[]> => {
+  getMealPlan: async (userId: string): Promise<Food[]> => {
     try {
-      const snapshot = await firestoreInstance.collection(COLLECTIONS.MEAL_PLANS).get();
+      const snapshot = await firestoreInstance
+        .collection(COLLECTIONS.MEAL_PLANS)
+        .where('userId', '==', userId)
+        .get();
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -141,9 +153,13 @@ export const foodService = {
   },
 
   // Add food to meal plan
-  addToMealPlan: async (food: Food): Promise<void> => {
+  addToMealPlan: async (userId: string, food: Food): Promise<void> => {
     try {
-      await firestoreInstance.collection(COLLECTIONS.MEAL_PLANS).add(food);
+      await firestoreInstance.collection(COLLECTIONS.MEAL_PLANS).add({
+        ...food,
+        userId,
+        addedAt: firestore.FieldValue.serverTimestamp()
+      });
     } catch (error) {
       console.error('Error adding to meal plan:', error);
       throw error;
@@ -151,12 +167,122 @@ export const foodService = {
   },
 
   // Remove food from meal plan
-  removeFromMealPlan: async (foodId: string): Promise<void> => {
+  removeFromMealPlan: async (userId: string, foodId: string): Promise<void> => {
     try {
-      await firestoreInstance.collection(COLLECTIONS.MEAL_PLANS).doc(foodId).delete();
+      const snapshot = await firestoreInstance
+        .collection(COLLECTIONS.MEAL_PLANS)
+        .where('userId', '==', userId)
+        .where('id', '==', foodId)
+        .get();
+
+      if (!snapshot.empty) {
+        await snapshot.docs[0].ref.delete();
+      }
     } catch (error) {
       console.error('Error removing from meal plan:', error);
       throw error;
     }
+  }
+};
+
+// Save user health info
+export const saveUserHealthInfo = async (userId: string, healthInfo: Omit<UserHealthInfo, 'userId' | 'lastUpdated'>): Promise<void> => {
+  try {
+    await firestoreInstance
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('health')
+      .doc('info')
+      .set({
+        ...healthInfo,
+        userId,
+        lastUpdated: firestore.FieldValue.serverTimestamp()
+      });
+  } catch (error) {
+    console.error('Error saving user health info:', error);
+    throw error;
+  }
+};
+
+// Get user health info
+export const getUserHealthInfo = async (userId: string): Promise<UserHealthInfo | null> => {
+  try {
+    const doc = await firestoreInstance
+      .collection(COLLECTIONS.USERS)
+      .doc(userId)
+      .collection('health')
+      .doc('info')
+      .get();
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data();
+    return {
+      ...data,
+      lastUpdated: data?.lastUpdated?.toDate() || new Date()
+    } as UserHealthInfo;
+  } catch (error) {
+    console.error('Error getting user health info:', error);
+    throw error;
+  }
+};
+
+// Sample food data
+const sampleFoods = [
+  {
+    name: 'Cơm gà',
+    calories: 500,
+    category: 'Ăn trưa',
+    imageBase64: ''
+  },
+  {
+    name: 'Phở bò',
+    calories: 450,
+    category: 'Ăn sáng',
+    imageBase64: ''
+  },
+  {
+    name: 'Bún chả',
+    calories: 550,
+    category: 'Ăn trưa',
+    imageBase64: ''
+  },
+  {
+    name: 'Bánh mì',
+    calories: 300,
+    category: 'Ăn sáng',
+    imageBase64: ''
+  },
+  {
+    name: 'Salad',
+    calories: 200,
+    category: 'Ăn tối',
+    imageBase64: ''
+  },
+  {
+    name: 'Trái cây',
+    calories: 100,
+    category: 'Ăn vặt',
+    imageBase64: ''
+  }
+];
+
+// Initialize sample data
+export const initializeSampleData = async () => {
+  try {
+    const foodsCollection = firestoreInstance.collection(COLLECTIONS.FOODS);
+    const snapshot = await foodsCollection.get();
+    
+    if (snapshot.empty) {
+      console.log('Adding sample foods...');
+      for (const food of sampleFoods) {
+        await foodsCollection.add(food);
+      }
+      console.log('Sample foods added successfully');
+    }
+  } catch (error) {
+    console.error('Error initializing sample data:', error);
   }
 }; 

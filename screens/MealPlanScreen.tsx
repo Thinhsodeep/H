@@ -12,6 +12,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { foodService, Food } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
 
 type MealPlanScreenRouteProp = RouteProp<RootStackParamList, 'MealPlan'>;
 
@@ -20,14 +21,27 @@ const MealPlanScreen: React.FC = () => {
   const { targetCalories, goal } = route.params;
   const [mealPlan, setMealPlan] = useState<Food[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [totalCalories, setTotalCalories] = useState(0);
 
   useEffect(() => {
     loadMealPlan();
   }, [selectedCategory]);
 
+  useEffect(() => {
+    // Tính tổng calories mỗi khi mealPlan thay đổi
+    const total = mealPlan.reduce((sum, food) => sum + (food.calories || 0), 0);
+    setTotalCalories(total);
+  }, [mealPlan]);
+
   const loadMealPlan = async () => {
     try {
-      const foods = await foodService.getMealPlan();
+      const userId = auth().currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để xem thực đơn');
+        return;
+      }
+
+      const foods = await foodService.getMealPlan(userId);
       
       // Lọc theo category nếu có
       if (selectedCategory) {
@@ -44,7 +58,13 @@ const MealPlanScreen: React.FC = () => {
 
   const removeFromMealPlan = async (foodId: string) => {
     try {
-      await foodService.removeFromMealPlan(foodId);
+      const userId = auth().currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để xóa món ăn khỏi thực đơn');
+        return;
+      }
+
+      await foodService.removeFromMealPlan(userId, foodId);
       const updatedMealPlan = mealPlan.filter(food => food.id !== foodId);
       setMealPlan(updatedMealPlan);
       Alert.alert('Thành công', 'Đã xóa món ăn khỏi thực đơn');
@@ -54,13 +74,8 @@ const MealPlanScreen: React.FC = () => {
     }
   };
 
-  const getTotalCalories = () => {
-    return mealPlan.reduce((total, food) => total + food.calories, 0);
-  };
-
   const getProgressColor = () => {
-    const total = getTotalCalories();
-    const percentage = total / targetCalories;
+    const percentage = totalCalories / targetCalories;
     
     if (percentage < 0.8) return '#FFA726'; // Orange
     if (percentage > 1.2) return '#EF5350'; // Red
@@ -81,7 +96,7 @@ const MealPlanScreen: React.FC = () => {
       )}
       <View style={styles.foodInfo}>
         <Text style={styles.foodName}>{item.name}</Text>
-        <Text style={styles.foodCalories}>{item.calories} calories</Text>
+        <Text style={styles.foodCalories}>{Math.round(item.calories || 0)} calories</Text>
         <Text style={styles.foodCategory}>{item.category}</Text>
       </View>
       <TouchableOpacity
@@ -110,7 +125,7 @@ const MealPlanScreen: React.FC = () => {
         <Text style={styles.title}>Thực đơn của bạn</Text>
         <View style={styles.calorieInfo}>
           <Text style={styles.calorieText}>
-            Tổng calories: {getTotalCalories()} / {targetCalories}
+            Tổng calories: {Math.round(totalCalories).toLocaleString()} / {Math.round(targetCalories).toLocaleString()}
           </Text>
           <View style={[styles.progressBar, { backgroundColor: getProgressColor() }]} />
         </View>

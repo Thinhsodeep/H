@@ -12,6 +12,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { foodService, Food } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
 
 type FoodSuggestionsScreenRouteProp = RouteProp<RootStackParamList, 'FoodSuggestions'>;
 
@@ -68,7 +69,13 @@ const FoodSuggestionsScreen: React.FC = () => {
 
   const addToMealPlan = async (food: Food) => {
     try {
-      const mealPlanData = await foodService.getMealPlan();
+      const userId = auth().currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để thêm món ăn vào thực đơn');
+        return;
+      }
+
+      const mealPlanData = await foodService.getMealPlan(userId);
       let mealPlan: Food[] = [];
       
       if (mealPlanData) {
@@ -83,7 +90,7 @@ const FoodSuggestionsScreen: React.FC = () => {
       }
 
       // Thêm món ăn vào thực đơn
-      await foodService.addToMealPlan(food);
+      await foodService.addToMealPlan(userId, food);
       Alert.alert('Thành công', 'Đã thêm món ăn vào thực đơn');
     } catch (error) {
       console.error('Error adding to meal plan:', error);
@@ -159,12 +166,22 @@ const FoodSuggestionsScreen: React.FC = () => {
         ))}
       </View>
 
-      <FlatList
-        data={suggestedFoods}
-        renderItem={renderFoodItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-      />
+      {suggestedFoods.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Icon name="restaurant" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>Không có món ăn nào phù hợp</Text>
+          <Text style={styles.emptySubText}>
+            Hãy thử chọn danh mục khác hoặc điều chỉnh mục tiêu calories
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={suggestedFoods}
+          renderItem={renderFoodItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContainer}
+        />
+      )}
     </View>
   );
 };
@@ -241,6 +258,25 @@ const styles = StyleSheet.create({
   },
   addButton: {
     padding: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 

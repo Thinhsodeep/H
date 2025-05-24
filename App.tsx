@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
 import { getApp } from '@react-native-firebase/app';
+import { initializeSampleData } from './config/firebase';
 
 import SignupScreen from './screens/SignupScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -54,6 +55,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App: React.FC = () => {
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -67,10 +69,21 @@ const App: React.FC = () => {
       }
     };
 
+    const initializeApp = async () => {
+      try {
+        await initializeSampleData();
+      } catch (error) {
+        console.error('Error initializing app:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     checkFirebase();
+    initializeApp();
   }, []);
 
-  if (!isFirebaseReady) {
+  if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#4CAF50" />

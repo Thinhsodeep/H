@@ -9,6 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import auth from '@react-native-firebase/auth';
+import { saveUserHealthInfo } from '../config/firebase';
 
 interface HealthCalculatorScreenProps {
   navigation: {
@@ -22,7 +24,7 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [activityLevel, setActivityLevel] = useState('moderate');
-  const [goal, setGoal] = useState('maintain');
+  const [goal, setGoal] = useState<'lose' | 'gain' | 'maintain'>('maintain');
   const [results, setResults] = useState<{
     bmi: number;
     bmiCategory: string;
@@ -69,7 +71,7 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     if (!age || !height || !weight) {
       Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
       return;
@@ -95,6 +97,20 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
       tdee,
       recommendedCalories,
     });
+
+    // Lưu thông tin TDEE
+    try {
+      const userId = auth().currentUser?.uid;
+      if (userId) {
+        await saveUserHealthInfo(userId, {
+          tdee,
+          goal,
+          targetCalories: recommendedCalories
+        });
+      }
+    } catch (error) {
+      console.error('Error saving health info:', error);
+    }
   };
 
   const handleViewFoodSuggestions = () => {
@@ -181,7 +197,7 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={goal}
-              onValueChange={(value) => setGoal(value)}
+              onValueChange={(value) => setGoal(value as 'lose' | 'gain' | 'maintain')}
               style={styles.picker}
             >
               <Picker.Item label="Giảm cân" value="lose" />
@@ -214,13 +230,6 @@ const HealthCalculatorScreen: React.FC<HealthCalculatorScreenProps> = ({ navigat
               <Text style={styles.resultLabel}>Calo khuyến nghị:</Text>
               <Text style={styles.resultValue}>{Math.round(results.recommendedCalories)} calo/ngày</Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.suggestionsButton}
-              onPress={handleViewFoodSuggestions}
-            >
-              <Text style={styles.suggestionsButtonText}>Xem danh sách món ăn</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.suggestionsButton, { marginTop: 10, backgroundColor: '#4CAF50' }]}

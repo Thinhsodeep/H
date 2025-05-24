@@ -5,6 +5,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import auth from '@react-native-firebase/auth';
+import { getUserHealthInfo } from '../config/firebase';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -13,27 +15,53 @@ const HomeScreen: React.FC = () => {
   const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
-    const getUserEmail = async () => {
-      try {
-        const email = await AsyncStorage.getItem('userEmail');
-        if (email) {
-          setUserEmail(email);
-        }
-      } catch (error) {
-        console.error('Error getting user email:', error);
-      }
-    };
-
-    getUserEmail();
+    const user = auth().currentUser;
+    if (user) {
+      setUserEmail(user.email || '');
+    }
   }, []);
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('userEmail');
+      await auth().signOut();
       navigation.replace('Login');
     } catch (error) {
       console.error('Error logging out:', error);
-      Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
+      Alert.alert('Lỗi', 'Không thể đăng xuất');
+    }
+  };
+
+  const handleViewMealPlan = async () => {
+    try {
+      const userId = auth().currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để xem thực đơn');
+        return;
+      }
+
+      const healthInfo = await getUserHealthInfo(userId);
+      if (!healthInfo) {
+        Alert.alert(
+          'Thông báo',
+          'Bạn chưa có thông tin TDEE. Vui lòng tính TDEE trước khi xem thực đơn.',
+          [
+            { text: 'Hủy', style: 'cancel' },
+            { 
+              text: 'Tính TDEE',
+              onPress: () => navigation.navigate('HealthCalculator')
+            }
+          ]
+        );
+        return;
+      }
+
+      navigation.navigate('MealPlan', {
+        targetCalories: healthInfo.targetCalories,
+        goal: healthInfo.goal
+      });
+    } catch (error) {
+      console.error('Error loading meal plan:', error);
+      Alert.alert('Lỗi', 'Không thể tải thực đơn');
     }
   };
 
@@ -82,6 +110,14 @@ const HomeScreen: React.FC = () => {
           >
             <Icon name="calculate" size={32} color="#4CAF50" />
             <Text style={styles.menuText}>Tính TDEE & BMI</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleViewMealPlan}
+          >
+            <Icon name="menu-book" size={32} color="#4CAF50" />
+            <Text style={styles.menuText}>Thực đơn của tôi</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
