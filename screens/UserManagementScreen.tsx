@@ -9,11 +9,13 @@ import {
   TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
 interface User {
+  id: string;
   email: string;
-  isAdmin: boolean;
+  role: 'admin' | 'user';
 }
 
 const UserManagementScreen: React.FC = () => {
@@ -26,23 +28,32 @@ const UserManagementScreen: React.FC = () => {
 
   const loadUsers = async () => {
     try {
-      const usersData = await AsyncStorage.getItem('users');
-      if (usersData) {
-        setUsers(JSON.parse(usersData));
-      }
+      const usersSnapshot = await firestore().collection('users').get();
+      const usersData = usersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as User[];
+      setUsers(usersData);
     } catch (error) {
       console.error('Error loading users:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách người dùng');
     }
   };
 
-  const toggleAdminStatus = async (email: string) => {
+  const toggleAdminStatus = async (userId: string, currentRole: string) => {
     try {
-      const updatedUsers = users.map(user =>
-        user.email === email ? { ...user, isAdmin: !user.isAdmin } : user
+      const newRole = currentRole === 'admin' ? 'user' : 'admin';
+      await firestore().collection('users').doc(userId).update({
+        role: newRole,
+      });
+      
+      // Cập nhật state
+      setUsers(prevUsers =>
+        prevUsers.map(user =>
+          user.id === userId ? { ...user, role: newRole } : user
+        )
       );
-      await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
-      setUsers(updatedUsers);
+      
       Alert.alert('Thành công', 'Đã cập nhật quyền người dùng');
     } catch (error) {
       console.error('Error updating user:', error);
@@ -50,11 +61,14 @@ const UserManagementScreen: React.FC = () => {
     }
   };
 
-  const deleteUser = async (email: string) => {
+  const deleteUser = async (userId: string) => {
     try {
-      const updatedUsers = users.filter(user => user.email !== email);
-      await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
-      setUsers(updatedUsers);
+      // Xóa thông tin người dùng khỏi Firestore
+      await firestore().collection('users').doc(userId).delete();
+      
+      // Cập nhật state
+      setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+      
       Alert.alert('Thành công', 'Đã xóa người dùng');
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -71,17 +85,17 @@ const UserManagementScreen: React.FC = () => {
       <View style={styles.userInfo}>
         <Icon name="person" size={24} color="#4CAF50" />
         <Text style={styles.userEmail}>{item.email}</Text>
-        <Text style={[styles.userRole, item.isAdmin && styles.adminRole]}>
-          {item.isAdmin ? 'Admin' : 'User'}
+        <Text style={[styles.userRole, item.role === 'admin' && styles.adminRole]}>
+          {item.role === 'admin' ? 'Admin' : 'User'}
         </Text>
       </View>
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => toggleAdminStatus(item.email)}
+          onPress={() => toggleAdminStatus(item.id, item.role)}
         >
           <Icon
-            name={item.isAdmin ? 'admin-panel-settings' : 'person'}
+            name={item.role === 'admin' ? 'admin-panel-settings' : 'person'}
             size={24}
             color="#4CAF50"
           />
@@ -94,7 +108,7 @@ const UserManagementScreen: React.FC = () => {
               'Bạn có chắc chắn muốn xóa người dùng này?',
               [
                 { text: 'Hủy', style: 'cancel' },
-                { text: 'Xóa', onPress: () => deleteUser(item.email), style: 'destructive' },
+                { text: 'Xóa', onPress: () => deleteUser(item.id), style: 'destructive' },
               ]
             );
           }}
@@ -120,7 +134,7 @@ const UserManagementScreen: React.FC = () => {
       <FlatList
         data={filteredUsers}
         renderItem={renderUserItem}
-        keyExtractor={item => item.email}
+        keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
       />
     </View>

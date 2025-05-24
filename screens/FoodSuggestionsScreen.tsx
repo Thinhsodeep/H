@@ -10,18 +10,10 @@ import {
 } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { foodService, Food } from '../config/firebase';
 
 type FoodSuggestionsScreenRouteProp = RouteProp<RootStackParamList, 'FoodSuggestions'>;
-
-interface Food {
-  id: string;
-  name: string;
-  calories: number;
-  category: string;
-  imageBase64: string;
-}
 
 const FoodSuggestionsScreen: React.FC = () => {
   const route = useRoute<FoodSuggestionsScreenRouteProp>();
@@ -35,42 +27,39 @@ const FoodSuggestionsScreen: React.FC = () => {
 
   const loadSuggestedFoods = async () => {
     try {
-      const foodsData = await AsyncStorage.getItem('foods_global');
-      if (foodsData) {
-        const allFoods: Food[] = JSON.parse(foodsData);
-        let filteredFoods = allFoods;
-
-        // Lọc theo category nếu có
-        if (selectedCategory) {
-          filteredFoods = filteredFoods.filter(food => food.category === selectedCategory);
-        }
-
-        // Lọc theo mục tiêu và calories
-        filteredFoods = filteredFoods.filter(food => {
-          switch (goal) {
-            case 'lose':
-              return food.calories <= targetCalories * 0.3; // 30% calories cho mỗi bữa
-            case 'gain':
-              return food.calories >= targetCalories * 0.2; // 20% calories cho mỗi bữa
-            case 'maintain':
-              return food.calories <= targetCalories * 0.25; // 25% calories cho mỗi bữa
-            default:
-              return true;
-          }
-        });
-
-        // Sắp xếp theo calories
-        filteredFoods.sort((a, b) => {
-          if (goal === 'lose') {
-            return a.calories - b.calories;
-          } else if (goal === 'gain') {
-            return b.calories - a.calories;
-          }
-          return Math.abs(a.calories - targetCalories * 0.25) - Math.abs(b.calories - targetCalories * 0.25);
-        });
-
-        setSuggestedFoods(filteredFoods);
+      let foods: Food[] = [];
+      
+      if (selectedCategory) {
+        foods = await foodService.getFoodsByCategory(selectedCategory);
+      } else {
+        foods = await foodService.getAllFoods();
       }
+
+      // Lọc theo mục tiêu và calories
+      foods = foods.filter(food => {
+        switch (goal) {
+          case 'lose':
+            return food.calories <= targetCalories * 0.3; // 30% calories cho mỗi bữa
+          case 'gain':
+            return food.calories >= targetCalories * 0.2; // 20% calories cho mỗi bữa
+          case 'maintain':
+            return food.calories <= targetCalories * 0.25; // 25% calories cho mỗi bữa
+          default:
+            return true;
+        }
+      });
+
+      // Sắp xếp theo calories
+      foods.sort((a, b) => {
+        if (goal === 'lose') {
+          return a.calories - b.calories;
+        } else if (goal === 'gain') {
+          return b.calories - a.calories;
+        }
+        return Math.abs(a.calories - targetCalories * 0.25) - Math.abs(b.calories - targetCalories * 0.25);
+      });
+
+      setSuggestedFoods(foods);
     } catch (error) {
       console.error('Error loading suggested foods:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách món ăn gợi ý');
@@ -79,11 +68,11 @@ const FoodSuggestionsScreen: React.FC = () => {
 
   const addToMealPlan = async (food: Food) => {
     try {
-      const mealPlanData = await AsyncStorage.getItem('mealPlan');
+      const mealPlanData = await foodService.getMealPlan();
       let mealPlan: Food[] = [];
       
       if (mealPlanData) {
-        mealPlan = JSON.parse(mealPlanData);
+        mealPlan = mealPlanData;
       }
 
       // Kiểm tra xem món ăn đã có trong thực đơn chưa
@@ -94,8 +83,7 @@ const FoodSuggestionsScreen: React.FC = () => {
       }
 
       // Thêm món ăn vào thực đơn
-      mealPlan.push(food);
-      await AsyncStorage.setItem('mealPlan', JSON.stringify(mealPlan));
+      await foodService.addToMealPlan(food);
       Alert.alert('Thành công', 'Đã thêm món ăn vào thực đơn');
     } catch (error) {
       console.error('Error adding to meal plan:', error);

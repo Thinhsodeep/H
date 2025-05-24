@@ -5,8 +5,8 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import firestore from '@react-native-firebase/firestore';
 
 interface Statistics {
   totalUsers: number;
@@ -41,40 +41,37 @@ const StatisticsScreen: React.FC = () => {
 
   const loadStatistics = async () => {
     try {
-      const [usersData, foodsData] = await Promise.all([
-        AsyncStorage.getItem('users'),
-        AsyncStorage.getItem('foods'),
-      ]);
+      // Lấy thông tin người dùng từ Firestore
+      const usersSnapshot = await firestore().collection('users').get();
+      const users = usersSnapshot.docs.map(doc => doc.data());
+      
+      const adminUsers = users.filter(user => user.role === 'admin').length;
+      setStats(prev => ({
+        ...prev,
+        totalUsers: users.length,
+        adminUsers,
+        regularUsers: users.length - adminUsers,
+      }));
 
-      if (usersData) {
-        const users = JSON.parse(usersData);
-        const adminUsers = users.filter((user: any) => user.isAdmin).length;
-        setStats(prev => ({
-          ...prev,
-          totalUsers: users.length,
-          adminUsers,
-          regularUsers: users.length - adminUsers,
-        }));
-      }
+      // Lấy thông tin món ăn từ Firestore
+      const foodsSnapshot = await firestore().collection('foods').get();
+      const foods = foodsSnapshot.docs.map(doc => doc.data());
+      
+      const foodsByCategory = foods.reduce((acc: any, food: any) => {
+        acc[food.category] = (acc[food.category] || 0) + 1;
+        return acc;
+      }, {
+        breakfast: 0,
+        lunch: 0,
+        dinner: 0,
+        snack: 0,
+      });
 
-      if (foodsData) {
-        const foods = JSON.parse(foodsData);
-        const foodsByCategory = foods.reduce((acc: any, food: any) => {
-          acc[food.category] = (acc[food.category] || 0) + 1;
-          return acc;
-        }, {
-          breakfast: 0,
-          lunch: 0,
-          dinner: 0,
-          snack: 0,
-        });
-
-        setStats(prev => ({
-          ...prev,
-          totalFoods: foods.length,
-          foodsByCategory,
-        }));
-      }
+      setStats(prev => ({
+        ...prev,
+        totalFoods: foods.length,
+        foodsByCategory,
+      }));
     } catch (error) {
       console.error('Error loading statistics:', error);
     }

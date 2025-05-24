@@ -10,8 +10,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 type AdminScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Admin'>;
 
@@ -22,9 +23,9 @@ const AdminScreen: React.FC = () => {
   useEffect(() => {
     const getUserEmail = async () => {
       try {
-        const email = await AsyncStorage.getItem('userEmail');
-        if (email) {
-          setUserEmail(email);
+        const currentUser = auth().currentUser;
+        if (currentUser) {
+          setUserEmail(currentUser.email || '');
         }
       } catch (error) {
         console.error('Error getting user email:', error);
@@ -36,8 +37,11 @@ const AdminScreen: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('userEmail');
-      navigation.replace('Login');
+      await auth().signOut();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
     } catch (error) {
       console.error('Error logging out:', error);
       Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
@@ -70,7 +74,7 @@ const AdminScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => navigation.navigate('FoodManagement')}
+            onPress={() => navigation.navigate('FoodManagement', { userId: auth().currentUser?.uid || '' })}
           >
             <Icon name="restaurant" size={32} color="#4CAF50" />
             <Text style={styles.menuText}>Quản lý món ăn</Text>

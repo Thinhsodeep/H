@@ -12,10 +12,10 @@ import {
   ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'react-native-image-picker';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
+import { foodService } from '../config/firebase';
+import * as ImagePicker from 'react-native-image-picker';
 
 type FoodManagementScreenRouteProp = RouteProp<RootStackParamList, 'FoodManagement'>;
 
@@ -38,133 +38,78 @@ const FoodManagementScreen: React.FC = () => {
     name: '',
     calories: 0,
     category: 'Ăn sáng',
+    imageBase64: '',
   });
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
-    validateAndFixData();
     loadFoods();
-  }, [userId]);
-
-  const getStorageKey = () => {
-    // Nếu là admin, sử dụng key chung
-    if (userId === 'admin') {
-      return 'foods_global';
-    }
-    // Nếu là user thường, sử dụng key riêng
-    return `foods_${userId}`;
-  };
+  }, []);
 
   const loadFoods = async () => {
     try {
-      console.log('Loading foods for userId:', userId);
-      const foodsData = await AsyncStorage.getItem('foods_global');
-      console.log('Foods data from storage:', foodsData);
-
-      if (foodsData) {
-        try {
-          const parsedFoods = JSON.parse(foodsData);
-          console.log('Parsed foods:', parsedFoods);
-          if (Array.isArray(parsedFoods)) {
-            setFoods(parsedFoods);
-          } else {
-            console.error('Invalid foods data format');
-            setFoods([]);
-          }
-        } catch (e) {
-          console.error('Error parsing foods data:', e);
-          setFoods([]);
-        }
-      } else {
-        console.log('No foods data found');
-        setFoods([]);
-      }
+      const foodsData = await foodService.getAllFoods();
+      setFoods(foodsData as Food[]);
     } catch (error) {
       console.error('Error loading foods:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách món ăn');
     }
   };
 
-  const handleImagePick = () => {
-    const options = {
-      mediaType: 'photo' as const,
+  const handleImagePicker = () => {
+    ImagePicker.launchImageLibrary({
+      mediaType: 'photo',
       includeBase64: true,
-      maxHeight: 200,
-      maxWidth: 200,
-      quality: 0.3 as const,
-    };
-
-    ImagePicker.launchImageLibrary(options, (response) => {
+      maxHeight: 800,
+      maxWidth: 800,
+    }, (response) => {
       if (response.didCancel) {
         console.log('User cancelled image picker');
       } else if (response.errorCode) {
         console.log('ImagePicker Error: ', response.errorMessage);
-        Alert.alert('Lỗi', 'Không thể chọn hình ảnh');
-      } else {
-        const base64 = response.assets?.[0]?.base64;
-        if (base64) {
-          setSelectedImage(base64);
-          setNewFood(prev => ({ ...prev, imageBase64: base64 }));
-        }
+      } else if (response.assets?.[0]?.base64) {
+        setNewFood(prev => ({
+          ...prev,
+          imageBase64: response.assets[0].base64
+        }));
       }
     });
   };
 
-  const saveFood = async () => {
-    if (!newFood.name || !newFood.calories || !newFood.category) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
-      return;
-    }
-
+  const handleAddFood = async () => {
     try {
-      const newFoodItem: Food = {
-        id: Date.now().toString(),
-        name: newFood.name,
-        calories: Number(newFood.calories),
-        category: newFood.category,
-        imageBase64: selectedImage || '',
-      };
-
-      console.log('Saving new food item:', newFoodItem);
-
-      // Lấy dữ liệu hiện tại từ AsyncStorage
-      const existingFoodsData = await AsyncStorage.getItem('foods_global');
-      let currentFoods: Food[] = [];
-      
-      if (existingFoodsData) {
-        try {
-          currentFoods = JSON.parse(existingFoodsData);
-          console.log('Existing foods:', currentFoods);
-        } catch (e) {
-          console.error('Error parsing existing foods:', e);
-        }
+      if (!newFood.name || !newFood.calories || !newFood.category) {
+        Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+        return;
       }
 
-      // Thêm món ăn mới vào danh sách hiện tại
-      const updatedFoods = [...currentFoods, newFoodItem];
-      console.log('Updated foods list:', updatedFoods);
+      if (editingFood) {
+        await foodService.updateFood(editingFood.id, newFood);
+        Alert.alert('Thành công', 'Đã cập nhật món ăn');
+      } else {
+        await foodService.addFood(newFood);
+        Alert.alert('Thành công', 'Đã thêm món ăn mới');
+      }
 
-      // Lưu danh sách đã cập nhật vào AsyncStorage
-      await AsyncStorage.setItem('foods_global', JSON.stringify(updatedFoods));
-      
-      // Cập nhật state
-      setFoods(updatedFoods);
       setModalVisible(false);
-      setNewFood({ name: '', calories: 0, category: 'Ăn sáng' });
-      setSelectedImage(null);
-      Alert.alert('Thành công', 'Đã thêm món ăn mới');
+      setEditingFood(null);
+      setNewFood({
+        name: '',
+        calories: 0,
+        category: 'Ăn sáng',
+        imageBase64: '',
+      });
+      loadFoods();
     } catch (error) {
       console.error('Error saving food:', error);
       Alert.alert('Lỗi', 'Không thể lưu món ăn');
     }
   };
 
-  const deleteFood = async (id: string) => {
+  const handleDeleteFood = async (foodId: string) => {
     try {
-      const updatedFoods = foods.filter(food => food.id !== id);
-      await AsyncStorage.setItem('foods_global', JSON.stringify(updatedFoods));
-      setFoods(updatedFoods);
+      await foodService.deleteFood(foodId);
       Alert.alert('Thành công', 'Đã xóa món ăn');
+      loadFoods();
     } catch (error) {
       console.error('Error deleting food:', error);
       Alert.alert('Lỗi', 'Không thể xóa món ăn');
@@ -173,7 +118,12 @@ const FoodManagementScreen: React.FC = () => {
 
   const editFood = (food: Food) => {
     setEditingFood(food);
-    setNewFood(food);
+    setNewFood({
+      name: food.name,
+      calories: food.calories,
+      category: food.category,
+      imageBase64: food.imageBase64,
+    });
     setModalVisible(true);
   };
 
@@ -213,7 +163,7 @@ const FoodManagementScreen: React.FC = () => {
               'Bạn có chắc chắn muốn xóa món ăn này?',
               [
                 { text: 'Hủy', style: 'cancel' },
-                { text: 'Xóa', onPress: () => deleteFood(item.id), style: 'destructive' },
+                { text: 'Xóa', onPress: () => handleDeleteFood(item.id), style: 'destructive' },
               ]
             );
           }}
@@ -223,28 +173,6 @@ const FoodManagementScreen: React.FC = () => {
       </View>
     </View>
   );
-
-  const validateAndFixData = async () => {
-    try {
-      const foodsData = await AsyncStorage.getItem(getStorageKey());
-      if (foodsData) {
-        try {
-          const parsedFoods = JSON.parse(foodsData);
-          if (!Array.isArray(parsedFoods)) {
-            // Nếu dữ liệu không phải mảng, xóa và tạo mảng mới
-            await AsyncStorage.setItem(getStorageKey(), JSON.stringify([]));
-            setFoods([]);
-          }
-        } catch (e) {
-          // Nếu có lỗi parse, xóa dữ liệu cũ
-          await AsyncStorage.setItem(getStorageKey(), JSON.stringify([]));
-          setFoods([]);
-        }
-      }
-    } catch (error) {
-      console.error('Error validating data:', error);
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -265,44 +193,31 @@ const FoodManagementScreen: React.FC = () => {
         contentContainerStyle={styles.listContainer}
       />
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => {
-          setEditingFood(null);
-          setNewFood({
-            name: '',
-            calories: 0,
-            category: 'Ăn sáng',
-          });
-          setModalVisible(true);
-        }}
-      >
-        <Icon name="add" size={24} color="#fff" />
-      </TouchableOpacity>
-
       <Modal
+        visible={modalVisible}
         animationType="slide"
         transparent={true}
-        visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Thêm món ăn mới</Text>
-            
+            <Text style={styles.modalTitle}>
+              {editingFood ? 'Sửa món ăn' : 'Thêm món ăn mới'}
+            </Text>
+
             <TouchableOpacity
               style={styles.imagePickerButton}
-              onPress={handleImagePick}
+              onPress={handleImagePicker}
             >
-              {selectedImage ? (
+              {newFood.imageBase64 ? (
                 <Image
-                  source={{ uri: `data:image/jpeg;base64,${selectedImage}` }}
+                  source={{ uri: `data:image/jpeg;base64,${newFood.imageBase64}` }}
                   style={styles.previewImage}
                 />
               ) : (
-                <View style={styles.imagePickerPlaceholder}>
-                  <Icon name="add-a-photo" size={32} color="#4CAF50" />
-                  <Text style={styles.imagePickerText}>Chọn hình ảnh</Text>
+                <View style={styles.imagePlaceholder}>
+                  <Icon name="add-a-photo" size={32} color="#666" />
+                  <Text style={styles.imagePlaceholderText}>Thêm hình ảnh</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -311,7 +226,7 @@ const FoodManagementScreen: React.FC = () => {
               style={styles.input}
               placeholder="Tên món ăn"
               value={newFood.name}
-              onChangeText={(text) => setNewFood(prev => ({ ...prev, name: text }))}
+              onChangeText={text => setNewFood({ ...newFood, name: text })}
             />
 
             <TextInput
@@ -319,18 +234,18 @@ const FoodManagementScreen: React.FC = () => {
               placeholder="Calories"
               keyboardType="numeric"
               value={newFood.calories?.toString()}
-              onChangeText={(text) => setNewFood(prev => ({ ...prev, calories: Number(text) }))}
+              onChangeText={text => setNewFood({ ...newFood, calories: parseInt(text) || 0 })}
             />
 
-            <View style={styles.categoryContainer}>
-              {['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'].map((category) => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryContainer}>
+              {['Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt'].map(category => (
                 <TouchableOpacity
                   key={category}
                   style={[
                     styles.categoryButton,
                     newFood.category === category && styles.selectedCategory,
                   ]}
-                  onPress={() => setNewFood(prev => ({ ...prev, category }))}
+                  onPress={() => setNewFood({ ...newFood, category })}
                 >
                   <Text
                     style={[
@@ -342,29 +257,52 @@ const FoodManagementScreen: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
 
-            <View style={styles.modalButtons}>
+            <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => {
                   setModalVisible(false);
-                  setNewFood({ name: '', calories: 0, category: 'Ăn sáng' });
-                  setSelectedImage(null);
+                  setEditingFood(null);
+                  setNewFood({
+                    name: '',
+                    calories: 0,
+                    category: 'Ăn sáng',
+                    imageBase64: '',
+                  });
                 }}
               >
-                <Text style={styles.buttonText}>Hủy</Text>
+                <Text style={styles.modalButtonText}>Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
-                onPress={saveFood}
+                onPress={handleAddFood}
               >
-                <Text style={styles.buttonText}>Lưu</Text>
+                <Text style={[styles.modalButtonText, styles.saveButtonText]}>
+                  {editingFood ? 'Cập nhật' : 'Thêm'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => {
+          setEditingFood(null);
+          setNewFood({
+            name: '',
+            calories: 0,
+            category: 'Ăn sáng',
+            imageBase64: '',
+          });
+          setModalVisible(true);
+        }}
+      >
+        <Icon name="add" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -484,7 +422,6 @@ const styles = StyleSheet.create({
   },
   categoryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     marginBottom: 16,
   },
   categoryButton: {
@@ -493,7 +430,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#f5f5f5',
     marginRight: 8,
-    marginBottom: 8,
   },
   selectedCategory: {
     backgroundColor: '#4CAF50',
@@ -504,9 +440,10 @@ const styles = StyleSheet.create({
   selectedCategoryText: {
     color: '#fff',
   },
-  modalButtons: {
+  modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 16,
   },
   modalButton: {
     flex: 1,
@@ -520,34 +457,37 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: '#4CAF50',
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  modalButtonText: {
     textAlign: 'center',
+    fontSize: 16,
+    color: '#666',
+  },
+  saveButtonText: {
+    color: '#fff',
   },
   imagePickerButton: {
     width: '100%',
     height: 200,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
     marginBottom: 16,
+    borderRadius: 8,
     overflow: 'hidden',
-  },
-  imagePickerPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imagePickerText: {
-    marginTop: 8,
-    color: '#666',
-    fontSize: 16,
   },
   previewImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePlaceholderText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 16,
   },
 });
 

@@ -1,5 +1,5 @@
 // FoodDetailScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,41 +13,33 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { foodService, Food } from '../config/firebase';
 
 type FoodDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodDetail'>;
 type FoodDetailScreenRouteProp = RouteProp<RootStackParamList, 'FoodDetail'>;
-
-interface Food {
-  id: string;
-  name: string;
-  calories: number;
-  category: string;
-  imageBase64: string;
-}
 
 const FoodDetailScreen: React.FC = () => {
   const navigation = useNavigation<FoodDetailScreenNavigationProp>();
   const route = useRoute<FoodDetailScreenRouteProp>();
   const { food } = route.params;
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isInMealPlan, setIsInMealPlan] = useState(false);
+
+  useEffect(() => {
+    checkMealPlanStatus();
+  }, []);
+
+  const checkMealPlanStatus = async () => {
+    try {
+      const mealPlan = await foodService.getMealPlan();
+      setIsInMealPlan(mealPlan.some(item => item.id === food.id));
+    } catch (error) {
+      console.error('Error checking meal plan status:', error);
+    }
+  };
 
   const toggleFavorite = async () => {
     try {
-      const favoritesData = await AsyncStorage.getItem('favorites');
-      let favorites: Food[] = [];
-      
-      if (favoritesData) {
-        favorites = JSON.parse(favoritesData);
-      }
-
-      if (isFavorite) {
-        favorites = favorites.filter(f => f.id !== food.id);
-      } else {
-        favorites.push(food);
-      }
-
-      await AsyncStorage.setItem('favorites', JSON.stringify(favorites));
       setIsFavorite(!isFavorite);
       Alert.alert(
         'Thành công',
@@ -56,6 +48,23 @@ const FoodDetailScreen: React.FC = () => {
     } catch (error) {
       console.error('Error toggling favorite:', error);
       Alert.alert('Lỗi', 'Không thể cập nhật mục yêu thích');
+    }
+  };
+
+  const addToMealPlan = async () => {
+    try {
+      if (isInMealPlan) {
+        await foodService.removeFromMealPlan(food.id);
+        setIsInMealPlan(false);
+        Alert.alert('Thành công', 'Đã xóa khỏi kế hoạch ăn uống');
+      } else {
+        await foodService.addToMealPlan(food);
+        setIsInMealPlan(true);
+        Alert.alert('Thành công', 'Đã thêm vào kế hoạch ăn uống');
+      }
+    } catch (error) {
+      console.error('Error updating meal plan:', error);
+      Alert.alert('Lỗi', 'Không thể cập nhật kế hoạch ăn uống');
     }
   };
 
@@ -100,13 +109,12 @@ const FoodDetailScreen: React.FC = () => {
         </View>
 
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            // TODO: Implement add to meal plan functionality
-            Alert.alert('Thông báo', 'Tính năng đang được phát triển');
-          }}
+          style={[styles.addButton, isInMealPlan && styles.removeButton]}
+          onPress={addToMealPlan}
         >
-          <Text style={styles.addButtonText}>Thêm vào kế hoạch ăn uống</Text>
+          <Text style={styles.addButtonText}>
+            {isInMealPlan ? 'Xóa khỏi kế hoạch ăn uống' : 'Thêm vào kế hoạch ăn uống'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -167,6 +175,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  removeButton: {
+    backgroundColor: '#FF5252',
   },
   addButtonText: {
     color: '#fff',

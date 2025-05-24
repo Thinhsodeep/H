@@ -13,19 +13,11 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { foodService, Food } from '../config/firebase';
 
 type FoodListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'FoodList'>;
 type FoodListScreenRouteProp = RouteProp<RootStackParamList, 'FoodList'>;
-
-interface Food {
-  id: string;
-  name: string;
-  calories: number;
-  category: string;
-  imageBase64: string;
-}
 
 const FoodListScreen: React.FC = () => {
   const navigation = useNavigation<FoodListScreenNavigationProp>();
@@ -35,74 +27,19 @@ const FoodListScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(category || null);
   const [calories, setCalories] = useState<number | null>(routeCalories || null);
-  const [userId, setUserId] = useState<string>('');
 
   useEffect(() => {
-    const getUserId = async () => {
-      try {
-        const userData = await AsyncStorage.getItem('userData');
-        console.log('User data from storage:', userData);
-        if (userData) {
-          const parsedUserData = JSON.parse(userData);
-          console.log('Parsed user data:', parsedUserData);
-          setUserId(parsedUserData.role === 'admin' ? 'admin' : parsedUserData.id);
-        }
-      } catch (error) {
-        console.error('Error getting user ID:', error);
-        setUserId('default');
-      }
-    };
-    getUserId();
-  }, []);
-
-  useEffect(() => {
-    console.log('userId changed:', userId);
-    if (userId) {
-      loadFoods();
-    }
-  }, [userId, selectedCategory, calories]);
+    loadFoods();
+  }, [selectedCategory, calories]);
 
   const loadFoods = async () => {
     try {
-      console.log('Loading foods for userId:', userId);
-      
-      // Lấy dữ liệu global
-      const globalFoodsData = await AsyncStorage.getItem('foods_global');
-      console.log('Global foods data:', globalFoodsData);
-
       let foods: Food[] = [];
-
-      // Thêm dữ liệu global
-      if (globalFoodsData) {
-        try {
-          const parsedGlobalFoods = JSON.parse(globalFoodsData);
-          console.log('Parsed global foods:', parsedGlobalFoods);
-          if (Array.isArray(parsedGlobalFoods)) {
-            foods = [...parsedGlobalFoods];
-          }
-        } catch (e) {
-          console.error('Error parsing global foods:', e);
-        }
-      }
-
-      // Nếu là admin, lấy thêm dữ liệu riêng
-      if (userId === 'admin') {
-        const adminFoodsData = await AsyncStorage.getItem('foods_admin');
-        if (adminFoodsData) {
-          try {
-            const parsedAdminFoods = JSON.parse(adminFoodsData);
-            if (Array.isArray(parsedAdminFoods)) {
-              foods = [...foods, ...parsedAdminFoods];
-            }
-          } catch (e) {
-            console.error('Error parsing admin foods:', e);
-          }
-        }
-      }
-
-      // Lọc theo category nếu có
+      
       if (selectedCategory) {
-        foods = foods.filter(food => food.category === selectedCategory);
+        foods = await foodService.getFoodsByCategory(selectedCategory);
+      } else {
+        foods = await foodService.getAllFoods();
       }
 
       // Lọc theo calories nếu có
@@ -113,7 +50,6 @@ const FoodListScreen: React.FC = () => {
       // Sắp xếp theo calories
       foods.sort((a, b) => a.calories - b.calories);
 
-      console.log('Final foods list:', foods);
       setFoods(foods);
     } catch (error) {
       console.error('Error loading foods:', error);

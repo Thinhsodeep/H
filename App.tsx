@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { View, ActivityIndicator } from 'react-native';
+import { getApp } from '@react-native-firebase/app';
 
 import SignupScreen from './screens/SignupScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -51,17 +53,53 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App: React.FC = () => {
+  const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+
+  useEffect(() => {
+    const checkFirebase = async () => {
+      try {
+        const app = getApp();
+        console.log('Firebase đã sẵn sàng:', app.name);
+        setIsFirebaseReady(true);
+      } catch (error) {
+        console.error('Lỗi kiểm tra Firebase:', error);
+        setIsFirebaseReady(true); // Vẫn set true để app có thể chạy
+      }
+    };
+
+    checkFirebase();
+  }, []);
+
+  if (!isFirebaseReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        <Stack.Screen name="Signup" component={SignupScreen} options={{ title: 'Đăng ký' }} />
-        <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Đăng nhập' }} />
+      <Stack.Navigator
+        initialRouteName="Login"
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#4CAF50',
+          },
+          headerTintColor: '#fff',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        }}
+      >
+        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Trang chủ' }} />
         <Stack.Screen name="FoodList" component={FoodListScreen} options={{ title: 'Danh sách món ăn' }} />
         <Stack.Screen name="FoodDetail" component={FoodDetailScreen} options={{ title: 'Chi tiết món ăn' }} />
-        <Stack.Screen name="HealthCalculator" component={HealthCalculatorScreen} options={{ title: 'Tính TDEE & BMI' }} />
-        <Stack.Screen name="MealPlan" component={MealPlanScreen} options={{ title: 'Thực đơn' }} />
-        <Stack.Screen name="FoodSuggestions" component={FoodSuggestionsScreen} options={{ title: 'Gợi ý thực đơn' }} />
+        <Stack.Screen name="HealthCalculator" component={HealthCalculatorScreen} options={{ title: 'Tính toán sức khỏe' }} />
+        <Stack.Screen name="MealPlan" component={MealPlanScreen} options={{ title: 'Kế hoạch bữa ăn' }} />
+        <Stack.Screen name="FoodSuggestions" component={FoodSuggestionsScreen} options={{ title: 'Gợi ý món ăn' }} />
         <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Quản trị' }} />
         <Stack.Screen name="UserManagement" component={UserManagementScreen} options={{ title: 'Quản lý người dùng' }} />
         <Stack.Screen name="FoodManagement" component={FoodManagementScreen} options={{ title: 'Quản lý món ăn' }} />

@@ -13,8 +13,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 type SignupScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Signup'>;
 
@@ -37,22 +38,21 @@ const SignupScreen: React.FC = () => {
         return;
       }
 
-      const usersData = await AsyncStorage.getItem('users');
-      const users = usersData ? JSON.parse(usersData) : [];
-
-      if (users.some((user: any) => user.email === email)) {
-        Alert.alert('Lỗi', 'Email đã được sử dụng');
+      if (password.length < 6) {
+        Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
         return;
       }
 
-      const newUser = {
-        email,
-        password,
-        isAdmin,
-      };
+      // Tạo tài khoản với Firebase Authentication
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      const user = userCredential.user;
 
-      await AsyncStorage.setItem('users', JSON.stringify([...users, newUser]));
-      await AsyncStorage.setItem('userEmail', email);
+      // Lưu thông tin người dùng vào Firestore
+      await firestore().collection('users').doc(user.uid).set({
+        email: user.email,
+        role: isAdmin ? 'admin' : 'user',
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
 
       Alert.alert(
         'Thành công',
@@ -70,9 +70,19 @@ const SignupScreen: React.FC = () => {
           },
         ]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error during signup:', error);
-      Alert.alert('Lỗi', 'Không thể đăng ký. Vui lòng thử lại.');
+      let errorMessage = 'Không thể đăng ký. Vui lòng thử lại.';
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email đã được sử dụng';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Email không hợp lệ';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Mật khẩu quá yếu';
+      }
+      
+      Alert.alert('Lỗi', errorMessage);
     }
   };
 

@@ -10,18 +10,10 @@ import {
 } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { foodService, Food } from '../config/firebase';
 
 type MealPlanScreenRouteProp = RouteProp<RootStackParamList, 'MealPlan'>;
-
-interface Food {
-  id: string;
-  name: string;
-  calories: number;
-  category: string;
-  imageBase64: string;
-}
 
 const MealPlanScreen: React.FC = () => {
   const route = useRoute<MealPlanScreenRouteProp>();
@@ -35,15 +27,13 @@ const MealPlanScreen: React.FC = () => {
 
   const loadMealPlan = async () => {
     try {
-      const mealPlanData = await AsyncStorage.getItem('mealPlan');
-      if (mealPlanData) {
-        let foods: Food[] = JSON.parse(mealPlanData);
-        
-        // Lọc theo category nếu có
-        if (selectedCategory) {
-          foods = foods.filter(food => food.category === selectedCategory);
-        }
-
+      const foods = await foodService.getMealPlan();
+      
+      // Lọc theo category nếu có
+      if (selectedCategory) {
+        const filteredFoods = foods.filter(food => food.category === selectedCategory);
+        setMealPlan(filteredFoods);
+      } else {
         setMealPlan(foods);
       }
     } catch (error) {
@@ -54,8 +44,8 @@ const MealPlanScreen: React.FC = () => {
 
   const removeFromMealPlan = async (foodId: string) => {
     try {
+      await foodService.removeFromMealPlan(foodId);
       const updatedMealPlan = mealPlan.filter(food => food.id !== foodId);
-      await AsyncStorage.setItem('mealPlan', JSON.stringify(updatedMealPlan));
       setMealPlan(updatedMealPlan);
       Alert.alert('Thành công', 'Đã xóa món ăn khỏi thực đơn');
     } catch (error) {
